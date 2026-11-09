@@ -64,7 +64,13 @@ function QC_normName(s) {
 function QC_usable(q) {
   if (!q || q.disabled) return false;
   if (q.type === 'mc') return q.options && q.options.length >= 2 && q.correct && q.correct.length > 0;
+  if (q.type === 'fill') return !!(q.blanks && q.blanks.length && q.blanks.every(function (b) { return b && b.length; }));
   return q.type === 'essay';
+}
+/** Chuẩn hoá câu trả lời điền khuyết: không phân biệt hoa/thường, dấu nháy cong/thẳng, khoảng trắng thừa, dấu câu cuối */
+function QC_normAns(s) {
+  return String(s == null ? '' : s).normalize('NFC').replace(/[\u2018\u2019\u02BC`´]/g, "'").replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s+/g, ' ').trim().replace(/^["'(]+|["'.!?,;:)]+$/g, '').trim().toLowerCase();
 }
 
 /**
@@ -128,6 +134,8 @@ function QC_publicPaper(exam, paper) {
     if (q.type === 'mc') {
       o.options = it.perm.map(function (i) { return q.options[i]; });
       o.multi = q.correct.length > 1;
+    } else if (q.type === 'fill') {
+      o.nb = q.blanks.length;
     }
     return o;
   });
@@ -150,6 +158,18 @@ function QC_grade(exam, paper, answers, essayScores) {
       var ok = chosen.length === corr.length && chosen.every(function (x, k) { return x === corr[k]; });
       if (ok) { res.mcRight++; res.mcEarned += it.pts; }
       res.details.push({ type: 'mc', b: it.b, q: it.q, chosen: chosen, correct: corr, ok: ok, pts: it.pts, earned: ok ? it.pts : 0 });
+    } else if (q.type === 'fill') {
+      res.mcCount++;
+      var given = Array.isArray(a) ? a : (a == null ? [] : [a]);
+      var oks = q.blanks.map(function (alts, k) {
+        var g = QC_normAns(given[k]);
+        return !!g && alts.some(function (x) { return QC_normAns(x) === g; });
+      });
+      var nOk = oks.filter(Boolean).length;
+      var earnedF = Math.round(it.pts * nOk / q.blanks.length * 100) / 100;
+      if (nOk === q.blanks.length) res.mcRight++;
+      res.mcEarned += earnedF;
+      res.details.push({ type: 'fill', b: it.b, q: it.q, given: q.blanks.map(function (_, k) { return String(given[k] == null ? '' : given[k]).slice(0, 300); }), oks: oks, ok: nOk === q.blanks.length, pts: it.pts, earned: earnedF });
     } else {
       res.essayCount++;
       res.essayMax += it.pts;
@@ -187,19 +207,32 @@ function QC_review(exam, paper, g) {
       var disp = function (o) { return it.perm.indexOf(o); };
       return { type: 'mc', stem: q.stem, options: it.perm.map(function (o) { return q.options[o]; }), chosen: d.chosen.map(disp), correct: q.correct.map(disp), ok: d.ok };
     }
+    if (q.type === 'fill') return { type: 'fill', stem: q.stem, given: d.given, oks: d.oks, blanks: q.blanks, ok: d.ok };
     return { type: 'essay', stem: q.stem, text: d.text, answer: q.answer || '' };
   });
+}
+
+/** Thời gian tối đa cả bài (giây), 0 = không giới hạn.
+ *  navMode 'strict': cộng thời gian từng câu; 'free': không giới hạn (ôn tập) hoặc tổng thời gian giáo viên đặt */
+function QC_totalLimit(st, paper) {
+  st = st || {};
+  var sum = 0, unl = false;
+  paper.items.forEach(function (it) { if (it.sec > 0) sum += it.sec; else unl = true; });
+  if (st.navMode === 'free') {
+    if (st.freeTime !== 'total') return 0;
+    if (+st.totalMin > 0) return Math.round(+st.totalMin * 60);
+  }
+  return unl ? 0 : sum;
 }
 
 /** Thông tin đề công khai cho học sinh */
 function QC_publicInfo(exam) {
   var st = exam.settings || {};
   var paper = QC_buildPaper(exam, 'preview');
-  var totalSec = 0, unlimited = false;
-  paper.items.forEach(function (it) { if (it.sec > 0) totalSec += it.sec; else unlimited = true; });
+  var totalSec = QC_totalLimit(st, paper);
   return {
     id: exam.id, title: exam.title || '', info: exam.info || {},
-    count: paper.items.length, totalSec: unlimited ? 0 : totalSec,
+    count: paper.items.length, totalSec: totalSec, navMode: st.navMode === 'free' ? 'free' : 'strict',
     requireMssv: !!st.requireMssv, hasRoster: !!(st.roster && st.roster.length),
     maxViolations: +st.maxViolations || 0, fullscreen: st.fullscreen !== false,
     showScore: st.showScore !== false, scale: +st.scale || 10,
@@ -211,6 +244,6 @@ function QC_publicInfo(exam) {
 var QuizCore = {
   version: QC_VERSION, hash: QC_hash, rng: QC_rng, shuffle: QC_shuffle, parseList: QC_parseList, parseCount: QC_parseCount,
   round: QC_round, normName: QC_normName, usable: QC_usable, buildPaper: QC_buildPaper, publicPaper: QC_publicPaper,
-  grade: QC_grade, publicInfo: QC_publicInfo, window: QC_window, maxAttempts: QC_maxAttempts, review: QC_review
+  grade: QC_grade, publicInfo: QC_publicInfo, window: QC_window, maxAttempts: QC_maxAttempts, review: QC_review, totalLimit: QC_totalLimit, normAns: QC_normAns
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = QuizCore;

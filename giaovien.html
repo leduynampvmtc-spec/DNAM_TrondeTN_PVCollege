@@ -46,7 +46,8 @@
   <section class="section on" id="sec-banks">
     <div class="card">
       <h2>Nạp file đề Word (.docx)</h2>
-      <p class="muted" style="margin-top:0">Chọn một hoặc nhiều file. Hỗ trợ 2 kiểu: <b>“Câu 1: …”</b> với đáp án đúng là nhãn <u>A)</u> được gạch chân, và <b>dạng bảng</b> (“1.” | câu hỏi, “A)” | phương án, “Đáp án” | A). Câu không có phương án A, B, C… được hiểu là câu <b>tự luận</b>.</p>
+      <p class="muted" style="margin-top:0">Chọn một hoặc nhiều file. Hỗ trợ 2 kiểu: <b>“Câu 1: …”</b> với đáp án đúng là nhãn <u>A)</u> được gạch chân, và <b>dạng bảng</b> (“1.” | câu hỏi, “A)” | phương án, “Đáp án” | A). Câu <b>điền khuyết</b>: ghi đáp án trong ngoặc vuông, vd <i>She [goes] to school</i>. Câu không có phương án A, B, C… được hiểu là câu <b>tự luận</b>.</p>
+      <div class="msg info row" style="justify-content:space-between"><span>Chưa có đề đúng định dạng? Tải <b>file Word mẫu</b> (có sẵn ví dụ trắc nghiệm, điền khuyết, tự luận tiếng Việt và tiếng Anh) rồi soạn theo.</span><a class="btn sm primary" href="mau/Mau_soan_de_Tron_de_thi.docx" download>Tải mẫu soạn đề (.docx)</a></div>
       <label class="drop" id="drop" for="fileIn">
         <b>Kéo thả file .docx vào đây</b> hoặc bấm để chọn file
         <div class="hint">Mỗi file = 1 ngân hàng câu hỏi. Công thức MathType trong đề được hiển thị tự động.</div>
@@ -104,7 +105,8 @@
     <div class="card">
       <div class="row"><h2 style="margin:0">Thời gian &amp; số lần làm bài</h2><span class="spacer"></span>
         <button class="btn sm" id="presetTest" type="button">Mẫu: Kiểm tra / thi (1 lần)</button>
-        <button class="btn sm" id="presetPractice" type="button">Mẫu: Luyện tập (không giới hạn)</button></div>
+        <button class="btn sm" id="presetEasy" type="button">Mẫu: Bài dễ / gỡ điểm</button>
+        <button class="btn sm" id="presetPractice" type="button">Mẫu: Ôn tập (không giới hạn)</button></div>
       <div class="grid g3" style="margin-top:12px">
         <div><label>Bắt đầu cho vào làm từ</label><input type="datetime-local" id="s_from"><div class="hint">Trước giờ này học sinh mở link chỉ thấy đồng hồ chờ. Để trống = vào được ngay.</div></div>
         <div><label>Hết giờ vào làm lúc</label><input type="datetime-local" id="s_to"><div class="hint">Sau giờ này <b>không cho vào làm nữa</b> (em đang làm dở vẫn làm tiếp).</div></div>
@@ -121,6 +123,17 @@
 
     <div class="card">
       <h2>Cài đặt làm bài</h2>
+      <div class="grid g3" style="margin-bottom:14px">
+        <div><label>Cách làm bài</label>
+          <select id="s_nav">
+            <option value="strict">Từng câu — đếm ngược mỗi câu, KHÔNG quay lại (kiểm tra / thi)</option>
+            <option value="free">Tự do — được quay lại xem, sửa các câu trước</option>
+          </select>
+          <div class="hint" id="navHintT">Mỗi câu có đồng hồ riêng, hết giờ tự chuyển câu.</div></div>
+        <div class="freeOnly"><label>Thời gian (chế độ Tự do)</label>
+          <select id="s_ftime"><option value="none">Không giới hạn thời gian (ôn tập)</option><option value="total">Giới hạn tổng thời gian cả bài</option></select></div>
+        <div class="freeOnly totalOnly"><label>Tổng thời gian (phút)</label><input type="number" id="s_tmin" min="1" placeholder="tự tính theo số giây mỗi câu"><div class="hint">Để trống = cộng thời gian của từng câu.</div></div>
+      </div>
       <div class="grid g4">
         <div><label>Thời gian mặc định mỗi câu (giây)</label><input type="number" id="s_sec" value="60" min="0"><div class="hint">0 = không giới hạn. Có thể đặt riêng theo nhóm hoặc từng câu.</div></div>
         <div><label>Thứ tự câu hỏi</label><select id="s_order"><option value="mix">Trộn lẫn tất cả các nhóm</option><option value="group">Trộn trong từng nhóm</option><option value="keep">Giữ nguyên thứ tự</option></select></div>
@@ -198,7 +211,7 @@
 
 <div class="modal-bg" id="modal"><div class="modal" id="modalBody"></div></div>
 
-<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.1</span></div></footer>
+<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.3</span></div></footer>
 
 <script src="js/config.js"></script>
 <script src="js/common.js"></script>

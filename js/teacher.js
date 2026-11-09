@@ -36,10 +36,10 @@
   async function loadBanks() { banks = (await IDB.get('banks')) || LS.get('banks', []) || []; renderBanks(); }
   async function saveBanks() { const ok = await IDB.set('banks', banks); if (!ok) LS.set('banks', banks); renderBanks(); }
   function bankStats(b) {
-    const mc = b.questions.filter(q => q.type === 'mc').length, es = b.questions.length - mc;
+    const mc = b.questions.filter(q => q.type === 'mc').length, fi = b.questions.filter(q => q.type === 'fill').length, es = b.questions.length - mc - fi;
     const usable = b.questions.filter(q => QuizCore.usable(q)).length;
     const warn = b.questions.filter(q => q.warn && !q.disabled).length;
-    return { mc, es, usable, warn };
+    return { mc, fi, es, usable, warn };
   }
   function renderBanks() {
     const el = $('#bankList');
@@ -48,7 +48,7 @@
     el.innerHTML = banks.map((b, i) => {
       const s = bankStats(b); total += s.usable;
       return '<div class="bank"><div class="nm"><input type="text" data-rename="' + i + '" value="' + esc(b.name) + '"><div class="hint">' + esc(b.file || '') + ' · ' + fmtTime(b.addedAt) + '</div></div>' +
-        '<span class="pill">' + s.mc + ' trắc nghiệm</span>' + (s.es ? '<span class="pill">' + s.es + ' tự luận</span>' : '') +
+        '<span class="pill">' + s.mc + ' trắc nghiệm</span>' + (s.fi ? '<span class="pill">' + s.fi + ' điền khuyết</span>' : '') + (s.es ? '<span class="pill">' + s.es + ' tự luận</span>' : '') +
         (s.warn ? '<span class="pill warn">' + s.warn + ' câu cần kiểm tra</span>' : '<span class="pill ok">Hợp lệ</span>') +
         '<button class="btn sm" data-view="' + i + '">Xem / sửa</button><button class="btn sm danger" data-del="' + i + '">Xóa</button></div>';
     }).join('');
@@ -72,7 +72,7 @@
         const b = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: r.name, file: f.name, addedAt: Date.now(), questions: r.questions };
         banks.push(b);
         const s = bankStats(b);
-        msg.innerHTML += '<div class="msg ' + (s.warn ? 'warn' : 'ok') + '">' + esc(f.name) + ': nhận ' + r.questions.length + ' câu (' + s.mc + ' trắc nghiệm, ' + s.es + ' tự luận)' + (s.warn ? ' — ' + s.warn + ' câu cần kiểm tra (bấm “Xem / sửa”)' : '') + '.' + r.warnings.map(w => '<br>⚠ ' + esc(w)).join('') + '</div>';
+        msg.innerHTML += '<div class="msg ' + (s.warn ? 'warn' : 'ok') + '">' + esc(f.name) + ': nhận ' + r.questions.length + ' câu (' + s.mc + ' trắc nghiệm, ' + s.fi + ' điền khuyết, ' + s.es + ' tự luận)' + (s.warn ? ' — ' + s.warn + ' câu cần kiểm tra (bấm “Xem / sửa”)' : '') + '.' + r.warnings.map(w => '<br>⚠ ' + esc(w)).join('') + '</div>';
       } catch (e) { msg.innerHTML += '<div class="msg bad">' + esc(f.name) + ': ' + esc(e.message) + '</div>'; }
     }
     await saveBanks();
@@ -95,12 +95,13 @@
         b.questions.map((q, qi) => {
           const bad = q.type === 'mc' && !(q.correct && q.correct.length);
           return '<div class="qprev' + (q.disabled ? ' off' : '') + (bad ? ' bad' : '') + '"><div class="head"><b>Câu ' + (qi + 1) + '</b>' +
-            '<span class="pill">' + (q.type === 'mc' ? 'Trắc nghiệm' : 'Tự luận') + '</span>' + (q.warn ? '<span class="pill warn">' + esc(q.warn) + '</span>' : '') +
+            '<span class="pill">' + (q.type === 'mc' ? 'Trắc nghiệm' : q.type === 'fill' ? 'Điền khuyết' : 'Tự luận') + '</span>' + (q.warn ? '<span class="pill warn">' + esc(q.warn) + '</span>' : '') +
             '<span class="spacer"></span><label class="check"><input type="checkbox" data-use="' + qi + '"' + (q.disabled ? '' : ' checked') + '> Dùng</label>' +
             '<input type="number" class="mini" min="0" placeholder="giây" title="Thời gian riêng cho câu này (giây)" data-sec="' + qi + '" value="' + (q.sec != null ? q.sec : '') + '">' +
             '<input type="number" class="mini" min="0" step="0.25" placeholder="điểm" title="Điểm riêng cho câu này" data-pts="' + qi + '" value="' + (q.pts != null ? q.pts : '') + '"></div>' +
-            '<div>' + q.stem + '</div>' +
-            (q.type === 'mc' ? q.options.map((o, oi) => '<div class="opt' + (q.correct.includes(oi) ? ' ok' : '') + '" data-q="' + qi + '" data-o="' + oi + '">' + L[oi] + ') ' + o + (q.correct.includes(oi) ? ' ✓' : '') + (q.pin && q.pin[oi] ? ' <span class="pill" title="Phương án này giữ nguyên vị trí khi trộn">giữ vị trí</span>' : '') + '</div>').join('')
+            '<div>' + (q.type === 'fill' ? q.stem.replace(/<span class="blank" data-b="(\d+)">[^<]*<\/span>/g, (m, k) => '<span class="blank">(' + (+k + 1) + ')</span>') : q.stem) + '</div>' +
+            (q.type === 'fill' ? '<div class="hint" style="margin-top:6px">Đáp án chấp nhận (nhiều đáp án ngăn cách bằng dấu /):</div>' + q.blanks.map((alts, k) => '<div class="row" style="margin:3px 0"><b>(' + (k + 1) + ')</b><input type="text" data-fq="' + qi + '" data-fk="' + k + '" value="' + esc(alts.join(alts.some(x => x.indexOf('/') >= 0) ? ' | ' : ' / ')) + '" style="max-width:420px"></div>').join('') :
+            q.type === 'mc' ? q.options.map((o, oi) => '<div class="opt' + (q.correct.includes(oi) ? ' ok' : '') + '" data-q="' + qi + '" data-o="' + oi + '">' + L[oi] + ') ' + o + (q.correct.includes(oi) ? ' ✓' : '') + (q.pin && q.pin[oi] ? ' <span class="pill" title="Phương án này giữ nguyên vị trí khi trộn">giữ vị trí</span>' : '') + '</div>').join('')
               : (q.answer ? '<div class="hint"><b>Đáp án gợi ý:</b> ' + q.answer + '</div>' : '')) + '</div>';
         }).join(''));
       $('#mClose').onclick = () => { closeModal(); saveBanks(); };
@@ -110,6 +111,11 @@
         q.correct.sort();
         q.warn = q.correct.length ? '' : 'Chưa xác định được đáp án đúng';
         render();
+      });
+      $$('[data-fq]').forEach(el => el.onchange = () => {
+        const q = b.questions[+el.dataset.fq];
+        const v = el.value; q.blanks[+el.dataset.fk] = (v.indexOf('|') >= 0 ? v.split('|') : v.split('/')).map(x => x.trim()).filter(Boolean);
+        q.warn = QuizCore.usable(q) ? '' : 'Chỗ trống chưa có đáp án';
       });
       $$('[data-use]').forEach(el => el.onchange = () => { b.questions[+el.dataset.use].disabled = !el.checked; render(); });
       $$('[data-sec]').forEach(el => el.onchange = () => { const v = el.value.trim(); b.questions[+el.dataset.sec].sec = v === '' ? null : +v; });
@@ -133,12 +139,22 @@
     const ma = QuizCore.maxAttempts(s);
     $('#s_unlim').checked = ma === 0; $('#s_maxA').value = ma || (s.maxAttempts > 0 ? s.maxAttempts : 1); $('#s_maxA').disabled = ma === 0;
     $('#s_policy').value = s.scorePolicy || 'max'; $('#s_review').checked = !!s.showReview;
+    $('#s_nav').value = s.navMode === 'free' ? 'free' : 'strict'; $('#s_ftime').value = s.freeTime === 'total' ? 'total' : 'none'; $('#s_tmin').value = s.totalMin || '';
+    navUI();
     $('#s_shuffleOpts').checked = s.shuffleOpts !== false; $('#s_same').checked = !!s.sameForAll; $('#s_showScore').checked = s.showScore !== false;
     $('#s_full').checked = s.fullscreen !== false; $('#s_mssv').checked = !!s.requireMssv;
     $('#s_roster').value = (s.roster || []).join('\n'); $('#s_note').value = s.note || '';
     $('#editingPill').textContent = draft.id ? 'Đang sửa đề ' + draft.id : 'Đề mới';
     winSummary();
   }
+  function navUI() {
+    const free = $('#s_nav').value === 'free', total = $('#s_ftime').value === 'total';
+    $$('.freeOnly').forEach(e => e.classList.toggle('hide', !free));
+    $$('.totalOnly').forEach(e => e.classList.toggle('hide', !free || !total));
+    $('#navHintT').textContent = free ? 'Học sinh chuyển câu tự do, có bảng số câu và đánh dấu xem lại; thời gian tính cho cả bài.' : 'Mỗi câu có đồng hồ riêng, hết giờ tự chuyển câu.';
+  }
+  ['s_nav', 's_ftime'].forEach(id => $('#' + id).addEventListener('change', () => { navUI(); readForm(); summarize(); }));
+  $('#s_tmin').addEventListener('input', () => { readForm(); summarize(); });
   const tsOf = (v) => { if (!v) return 0; const t = new Date(v).getTime(); return isNaN(t) ? 0 : t; };
   function winSummary() {
     const f = $('#s_from').value, t = $('#s_to').value, e = $('#s_end').value;
@@ -158,8 +174,9 @@
   }
   ['s_from', 's_to', 's_end', 's_maxA'].forEach(id => $('#' + id).addEventListener('input', winSummary));
   $('#s_unlim').addEventListener('change', () => { $('#s_maxA').disabled = $('#s_unlim').checked; if ($('#s_unlim').checked && !$('#s_review').checked) $('#s_review').checked = true; readForm(); winSummary(); });
-  $('#presetTest').onclick = () => { $('#s_unlim').checked = false; $('#s_maxA').disabled = false; $('#s_maxA').value = 1; $('#s_review').checked = false; $('#s_policy').value = 'max'; readForm(); winSummary(); toast('Kiểm tra / thi: mỗi em 1 lần, không xem đáp án', 'ok'); };
-  $('#presetPractice').onclick = () => { $('#s_unlim').checked = true; $('#s_maxA').disabled = true; $('#s_review').checked = true; $('#s_policy').value = 'max'; $('#s_maxV').value = 0; readForm(); winSummary(); toast('Luyện tập: làm không giới hạn, xem đáp án sau khi nộp', 'ok'); };
+  $('#presetEasy').onclick = () => { $('#s_nav').value = 'free'; $('#s_ftime').value = 'total'; $('#s_unlim').checked = false; $('#s_maxA').disabled = false; $('#s_maxA').value = 1; $('#s_review').checked = false; navUI(); readForm(); winSummary(); summarize(); toast('Bài dễ / gỡ điểm: được quay lại sửa câu, giới hạn tổng thời gian, làm 1 lần', 'ok'); };
+  $('#presetTest').onclick = () => { $('#s_nav').value = 'strict'; navUI(); $('#s_unlim').checked = false; $('#s_maxA').disabled = false; $('#s_maxA').value = 1; $('#s_review').checked = false; $('#s_policy').value = 'max'; readForm(); winSummary(); summarize(); toast('Kiểm tra / thi: từng câu có đồng hồ, không quay lại, mỗi em 1 lần', 'ok'); };
+  $('#presetPractice').onclick = () => { $('#s_nav').value = 'free'; $('#s_ftime').value = 'none'; navUI(); $('#s_unlim').checked = true; $('#s_maxA').disabled = true; $('#s_review').checked = true; $('#s_policy').value = 'max'; $('#s_maxV').value = 0; readForm(); winSummary(); summarize(); toast('Ôn tập: được quay lại sửa câu, không giới hạn thời gian và số lần, xem đáp án sau khi nộp', 'ok'); };
   function readForm() {
     INFO_FIELDS.forEach(k => { const el = $('#i_' + k); if (el) draft.info[k] = el.value.trim(); });
     draft.settings = {
@@ -168,6 +185,7 @@
       openFromTs: tsOf($('#s_from').value), openToTs: tsOf($('#s_to').value), endAtTs: tsOf($('#s_end').value),
       maxAttempts: $('#s_unlim').checked ? 0 : Math.max(1, +$('#s_maxA').value || 1), unlimited: $('#s_unlim').checked,
       scorePolicy: $('#s_policy').value, showReview: $('#s_review').checked,
+      navMode: $('#s_nav').value, freeTime: $('#s_ftime').value, totalMin: +$('#s_tmin').value || 0,
       shuffleOpts: $('#s_shuffleOpts').checked, sameForAll: $('#s_same').checked, showScore: $('#s_showScore').checked,
       fullscreen: $('#s_full').checked, requireMssv: $('#s_mssv').checked,
       roster: $('#s_roster').value.split(/\r?\n/).map(x => x.replace(/\t/g, ' ').trim()).filter(Boolean), note: $('#s_note').value.trim()
@@ -227,7 +245,7 @@
     });
     const ebanks = used.map(id => {
       const b = banks.find(x => x.id === id);
-      return { name: b.name, questions: b.questions.map(q => ({ type: q.type, stem: q.stem, options: q.options, correct: q.correct, pin: q.pin, answer: q.answer, sec: q.sec, pts: q.pts, disabled: !!q.disabled || !QuizCore.usable(q) })) };
+      return { name: b.name, questions: b.questions.map(q => ({ type: q.type, stem: q.stem, options: q.options, correct: q.correct, pin: q.pin, answer: q.answer, blanks: q.blanks, sec: q.sec, pts: q.pts, disabled: !!q.disabled || !QuizCore.usable(q) })) };
     });
     const info = Object.assign({}, draft.info, { loai: loaiText(draft.info) });
     delete info.loaiKhac;
@@ -237,11 +255,12 @@
     if (!banks.length || !draft.groups.length) return;
     let exam; try { exam = buildExam(); } catch (e) { return; }
     const p = QuizCore.buildPaper(exam, 'sum');
+    const lim = QuizCore.totalLimit(exam.settings, p), free = exam.settings.navMode === 'free';
     let sec = 0, unl = false, pts = 0, ranged = draft.groups.some(g => /-/.test(String(g.count || '')));
     p.items.forEach(it => { if (it.sec > 0) sec += it.sec; else unl = true; pts += it.pts; });
     const es = p.items.filter(it => exam.banks[it.b].questions[it.q].type === 'essay').length;
     $('#groupSum').innerHTML = '<span>Tổng: <b>' + (ranged ? '~' : '') + p.items.length + ' câu</b></span>' + (es ? '<span>(' + es + ' tự luận)</span>' : '') +
-      '<span>Thời gian tối đa: <b>' + (unl ? 'không giới hạn' : fmtDur(sec)) + '</b></span><span>Tổng điểm thô: <b>' + pts + '</b> → quy về thang ' + (draft.settings.scale || 10) + '</span>';
+      '<span>' + (free ? 'Chế độ <b>Tự do</b> · thời gian cả bài: <b>' + (lim ? fmtDur(lim) : 'không giới hạn (ôn tập)') + '</b>' : 'Thời gian tối đa: <b>' + (unl ? 'không giới hạn' : fmtDur(sec)) + '</b>') + '</span><span>Tổng điểm thô: <b>' + pts + '</b> → quy về thang ' + (draft.settings.scale || 10) + '</span>';
   }
   $('#btnNew').onclick = () => { if (!confirm('Bắt đầu đề mới? (Cấu hình hiện tại sẽ được làm mới, ngân hàng vẫn giữ)')) return; draft = { id: null, info: { gv: draft.info.gv, loai: 'Kiểm tra thường xuyên', hinhThuc: 'Mô đun' }, groups: [], settings: {} }; LS.set('draft', draft); fillForm(); renderGroups(); $('#linkOut').innerHTML = ''; };
   $('#btnPreview').onclick = async () => {
@@ -408,15 +427,18 @@
       if (q.type === 'mc') {
         const chosen = d[2] || [];
         body = q.options.map((o, oi) => '<div class="opt' + (q.correct.includes(oi) ? ' ok' : '') + '">' + L[oi] + ') ' + o + (q.correct.includes(oi) ? ' ✓' : '') + (chosen.includes(oi) ? ' <span class="pill ' + (q.correct.includes(oi) ? 'ok' : 'bad') + '">HS chọn</span>' : '') + '</div>').join('') + (chosen.length ? '' : '<div class="pill warn">Không trả lời</div>');
+      } else if (q.type === 'fill') {
+        const given = d[2] || [], oks = d[3] || [];
+        body = '<div>' + q.stem.replace(/<span class="blank" data-b="(\d+)">[^<]*<\/span>/g, (m, k) => { k = +k; return '<span class="fillans ' + (oks[k] ? 'ok' : 'bad') + '">' + (esc(given[k] || '') || '(trống)') + '</span>' + (oks[k] ? '' : ' <span class="fillans ok">→ ' + esc(q.blanks[k].join(q.blanks[k].some(x => x.indexOf('/') >= 0) ? ' | ' : ' / ')) + '</span>'); }) + '</div>';
       } else {
         body = (q.answer ? '<div class="hint"><b>Đáp án gợi ý:</b> ' + q.answer + '</div>' : '') +
           '<div class="msg info" style="white-space:pre-wrap">' + (esc(d[2] || '') || '<i>(bỏ trống)</i>') + '</div>' +
           '<div class="row"><label style="margin:0">Điểm câu này (tối đa ' + it.pts + '):</label><input type="number" class="mini" min="0" max="' + it.pts + '" step="0.25" data-es="' + i + '" value="' + (scores[i] != null ? scores[i] : '') + '"></div>';
       }
-      return '<div class="qprev"><div class="head"><b>Câu ' + (i + 1) + '</b><span class="pill">' + it.pts + ' điểm</span>' + (q.type === 'mc' ? '<span class="pill ' + (d[3] ? 'ok' : 'bad') + '">' + (d[3] ? 'Đúng' : 'Sai') + '</span>' : '<span class="pill">Tự luận</span>') + '</div><div>' + q.stem + '</div>' + body + '</div>';
+      return '<div class="qprev"><div class="head"><b>Câu ' + (i + 1) + '</b><span class="pill">' + it.pts + ' điểm</span>' + (q.type === 'mc' ? '<span class="pill ' + (d[3] ? 'ok' : 'bad') + '">' + (d[3] ? 'Đúng' : 'Sai') + '</span>' : q.type === 'fill' ? '<span class="pill ' + ((d[3] || []).every(Boolean) ? 'ok' : 'bad') + '">Điền khuyết: đúng ' + (d[3] || []).filter(Boolean).length + '/' + q.blanks.length + '</span>' : '<span class="pill">Tự luận</span>') + '</div>' + (q.type === 'fill' ? '' : '<div>' + q.stem + '</div>') + body + '</div>';
     }).join('');
     const hasEs = paper.items.some(it => curExam.banks[it.b].questions[it.q].type === 'essay');
-    modal('<div class="row"><div><h2 style="margin:0">' + esc(r['Họ và tên']) + ' — ' + esc(r['Lớp']) + '</h2><div class="muted">Điểm: <b>' + esc(r['Điểm']) + '</b> · Đúng ' + r['Số câu đúng'] + '/' + r['Số câu TN'] + ' câu trắc nghiệm</div></div><span class="spacer"></span>' +
+    modal('<div class="row"><div><h2 style="margin:0">' + esc(r['Họ và tên']) + ' — ' + esc(r['Lớp']) + '</h2><div class="muted">Điểm: <b>' + esc(r['Điểm']) + '</b> · Đúng ' + r['Số câu đúng'] + '/' + r['Số câu TN'] + ' câu tự chấm (trắc nghiệm, điền khuyết)</div></div><span class="spacer"></span>' +
       (hasEs ? '<button class="btn primary" id="mSaveEs">Lưu điểm tự luận</button>' : '') + '<button class="btn" id="mClose">Đóng</button></div>' + html);
     $('#mClose').onclick = closeModal;
     if (hasEs) $('#mSaveEs').onclick = async () => {
@@ -456,7 +478,8 @@
       const paper = QuizCore.buildPaper(curExam, det.seed);
       paper.items.forEach((it, i) => {
         const q = curExam.banks[it.b].questions[it.q], d = det.d[i] || [];
-        if (q.type === 'mc') rows3.push([C(r['Họ và tên']), C(r['Lớp']), N(r['Lần'] || 1), N(i + 1), C('TN'), C(strip(q.stem).slice(0, 300)), C((d[2] || []).map(x => L[x]).join(', ') || '(bỏ trống)'), C(q.correct.map(x => L[x]).join(', ')), C(d[3] ? 'Đúng' : 'Sai')]);
+        if (q.type === 'fill') rows3.push([C(r['Họ và tên']), C(r['Lớp']), N(r['Lần'] || 1), N(i + 1), C('ĐK'), C(strip(q.stem).slice(0, 300)), C((d[2] || []).map((x, k) => '(' + (k + 1) + ') ' + (x || '—')).join('; ')), C(q.blanks.map((a, k) => '(' + (k + 1) + ') ' + a.join(a.some(x => x.indexOf('/') >= 0) ? ' | ' : '/')).join('; ')), C((d[3] || []).filter(Boolean).length + '/' + q.blanks.length + ' đúng')]);
+        else if (q.type === 'mc') rows3.push([C(r['Họ và tên']), C(r['Lớp']), N(r['Lần'] || 1), N(i + 1), C('TN'), C(strip(q.stem).slice(0, 300)), C((d[2] || []).map(x => L[x]).join(', ') || '(bỏ trống)'), C(q.correct.map(x => L[x]).join(', ')), C(d[3] ? 'Đúng' : 'Sai')]);
         else rows3.push([C(r['Họ và tên']), C(r['Lớp']), N(r['Lần'] || 1), N(i + 1), C('TL'), C(strip(q.stem).slice(0, 300)), C(String(d[2] || '').slice(0, 3000)), C(strip(q.answer).slice(0, 500)), C('')]);
       });
     });

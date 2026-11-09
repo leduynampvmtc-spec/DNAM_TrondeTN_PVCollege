@@ -96,3 +96,9 @@ footer.foot { border-top: 1px solid var(--line); padding: 16px 0 26px; color: va
 .right { text-align: right; }
 .hide { display: none !important; }
 .grid > .card + .card { margin-top: 0; }
+/* Điền khuyết */
+.blank { display: inline-block; min-width: 90px; border-bottom: 2px solid var(--brand-2); color: var(--brand-2); font-weight: 700; text-align: center; padding: 0 6px; }
+input.blankin, .blankin { display: inline-block !important; width: 150px !important; max-width: 70vw; padding: 3px 8px !important; margin: 2px 3px; border: 0 !important; border-bottom: 2px solid var(--brand-2) !important; border-radius: 6px 6px 0 0 !important; background: var(--soft) !important; font: inherit; font-weight: 600; color: var(--ink); text-align: center; user-select: text; -webkit-user-select: text; }
+.blankin:focus { box-shadow: none !important; background: rgba(15,90,133,.10) !important; }
+.fillans { display: inline-block; padding: 0 7px; border-radius: 6px; font-weight: 700; }
+.fillans.ok { background: var(--ok-bg); color: var(--ok); } .fillans.bad { background: var(--bad-bg); color: var(--bad); text-decoration: line-through; }

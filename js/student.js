@@ -40,7 +40,7 @@
     const saved = LS.get('student', {});
     const rows = [
       ['Loại bài', i.loai], [(i.hinhThuc || 'Môn học/Mô đun'), i.mon], ['Nội dung', i.noiDung], ['Lớp', i.lop], ['Khóa', i.khoa], ['Lần thi', i.lan], ['Ngày', i.ngay], ['Giáo viên', i.gv],
-      ['Số câu', info.count + ' câu'], ['Thời gian', info.totalSec ? 'tối đa ' + fmtDur(info.totalSec) + ' (mỗi câu có đồng hồ riêng)' : 'không giới hạn']
+      ['Số câu', info.count + ' câu'], ['Thời gian', info.navMode === 'free' ? (info.totalSec ? fmtDur(info.totalSec) + ' cho cả bài' : 'Không giới hạn (ôn tập)') : (info.totalSec ? 'tối đa ' + fmtDur(info.totalSec) + ' (mỗi câu có đồng hồ riêng)' : 'không giới hạn')]
     ].filter(r => r[1]);
     const w = info.window || {};
     if (!PREVIEW) {
@@ -56,7 +56,9 @@
       '<div class="grid g2"><div><label for="hoTen">Họ và tên *</label><input type="text" id="hoTen" autocomplete="name" placeholder="VD: Nguyễn Văn An" value="' + esc(saved.hoTen || '') + '"></div>' +
       '<div><label for="lop">Lớp *</label><input type="text" id="lop" placeholder="VD: CK1-24-N2" value="' + esc(saved.lop || i.lop || '') + '"></div></div>' +
       '<div style="margin-top:12px"><label for="mssv">Mã số HSSV ' + (info.requireMssv ? '*' : '(nếu có)') + '</label><input type="text" id="mssv" value="' + esc(saved.mssv || '') + '"></div>' +
-      '<ul class="rules"><li>Mỗi lần chỉ hiện <b>1 câu</b>, có đồng hồ đếm ngược. Hết giờ sẽ tự chuyển câu. <b>Không quay lại</b> được câu trước.</li>' +
+      '<ul class="rules">' + (info.navMode === 'free'
+        ? '<li>Mỗi lần hiện <b>1 câu</b>. Em <b>được quay lại</b> xem và sửa các câu trước, bấm số câu để chuyển nhanh, dùng “Đánh dấu xem lại” cho câu chưa chắc.' + (info.totalSec ? ' Hết <b>' + fmtDur(info.totalSec) + '</b> bài tự nộp.' : '') + '</li>'
+        : '<li>Mỗi lần chỉ hiện <b>1 câu</b>, có đồng hồ đếm ngược. Hết giờ sẽ tự chuyển câu. <b>Không quay lại</b> được câu trước.</li>') +
       '<li>Không rời khỏi cửa sổ làm bài, không chụp màn hình. Mọi lần vi phạm đều được ghi nhận và gửi giáo viên' + (info.maxViolations ? '; vi phạm <b>' + info.maxViolations + ' lần</b> bài sẽ tự nộp' : '') + '.</li>' +
       (info.note ? '<li>' + esc(info.note) + '</li>' : '') + '</ul>' +
       '<label class="check" style="margin:12px 0"><input type="checkbox" id="agree"> Tôi đã đọc quy định và cam kết tự làm bài.</label>' +
@@ -116,6 +118,8 @@
         }
       }
       while (S.answers.length < S.items.length) S.answers.push(null);
+      const lf = PREVIEW ? null : LS.get('att.' + S.attemptId, null);
+      S.flags = (lf && lf.flags) || [];
       beginExam();
     } catch (e) {
       $('#btnStart').disabled = false; $('#btnStart').textContent = 'Bắt đầu làm bài';
@@ -167,20 +171,22 @@
   }, true);
   document.addEventListener('keyup', (e) => { if (running && (e.key === 'PrintScreen' || e.keyCode === 44)) { clearClip(); violate('Chụp màn hình'); } }, true);
   ['contextmenu', 'copy', 'cut', 'dragstart'].forEach(ev => document.addEventListener(ev, (e) => { if (running) e.preventDefault(); }, true));
-  document.addEventListener('selectstart', (e) => { if (running && !(e.target.closest && e.target.closest('textarea'))) e.preventDefault(); }, true);
+  document.addEventListener('selectstart', (e) => { if (running && !(e.target.closest && e.target.closest('textarea, input'))) e.preventDefault(); }, true);
   window.addEventListener('beforeprint', () => { if (running) violate('In trang'); });
   window.addEventListener('beforeunload', (e) => { if (running) { saveLocal(); e.preventDefault(); e.returnValue = ''; } });
 
   /* -------------------------------- làm bài -------------------------------- */
-  function saveLocal() { if (S && !PREVIEW) LS.set('att.' + S.attemptId, { answers: S.answers, violations: S.violations, log: S.log.slice(-200), idx: S.idx }); }
+  function saveLocal() { if (S && !PREVIEW) LS.set('att.' + S.attemptId, { answers: S.answers, violations: S.violations, log: S.log.slice(-200), idx: S.idx, flags: S.flags }); }
   function sendProgress() { if (PREVIEW || !S) return; api(API, { action: 'progress', attemptId: S.attemptId, idx: S.idx, answers: S.answers, violations: S.violations }, 1).catch(() => {}); }
   function beginExam() {
     running = true;
     document.body.classList.add('exam');
     watermark();
     app.innerHTML = '<div class="qbar"><div class="wrap"><div class="timer" id="timer"><svg width="52" height="52"><circle cx="26" cy="26" r="22" fill="none" stroke="var(--line)" stroke-width="5"/><circle id="ring" cx="26" cy="26" r="22" fill="none" stroke="var(--brand-2)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="0"/></svg><b id="tleft"></b></div>' +
-      '<div><div style="font-weight:700" id="qpos"></div><div class="muted" style="font-size:.84rem">' + esc(S.hoTen) + ' · ' + esc(S.lop) + '</div></div><span class="spacer"></span><span class="pill warn hide" id="endChip"></span><span class="pill" id="vbadge"></span></div><div class="prog"><i id="progbar"></i></div></div>' +
-      '<div class="wrap"><div class="card qcard" id="qcard"></div><div style="max-width:860px;margin:0 auto 30px">' + QA.AUTHOR_HTML + '</div></div>';
+      '<div><div style="font-weight:700" id="qpos"></div><div class="muted" style="font-size:.84rem">' + esc(S.hoTen) + ' · ' + esc(S.lop) + '</div></div><span class="spacer"></span><span class="pill warn hide" id="endChip"></span><span class="pill" id="vbadge"></span>' + (FREE() ? '<button class="btn sm primary" id="barSubmit">Nộp bài</button>' : '') + '</div><div class="prog"><i id="progbar"></i></div></div>' +
+      '<div class="wrap"><div class="card qcard" id="qcard"></div>' + (FREE() ? '<div class="card qcard pal-card"><div class="row" style="margin-bottom:8px"><b>Danh sách câu</b><span class="spacer"></span><span class="hint" style="margin:0"><span class="lg ans"></span> đã làm <span class="lg flag"></span> xem lại <span class="lg"></span> chưa làm</span></div><div class="pal" id="pal"></div></div>' : '') +
+      '<div style="max-width:860px;margin:0 auto 30px">' + QA.AUTHOR_HTML + '</div></div>';
+    if (FREE()) { $('#barSubmit').onclick = confirmSubmit; startTotalTimer(); }
     showQ(S.idx, S.resumeRemain);
     const end = !PREVIEW && info.window && info.window.end;
     if (end) {
@@ -198,32 +204,53 @@
     S.idx = i; saveLocal(); sendProgress();
     const it = S.items[i], n = S.items.length;
     $('#qpos').textContent = 'Câu ' + (i + 1) + ' / ' + n;
-    $('#progbar').style.width = (i / n * 100) + '%';
+    $('#progbar').style.width = ((FREE() ? answeredCount() : i) / n * 100) + '%';
     $('#vbadge').textContent = S.violations ? 'Vi phạm: ' + S.violations : 'Đang làm bài';
     $('#vbadge').className = 'pill ' + (S.violations ? 'bad' : 'ok');
     let body;
     if (it.type === 'mc') {
       body = (it.multi ? '<div class="pill warn" style="margin-bottom:10px">Câu này có thể có NHIỀU đáp án đúng — chọn tất cả đáp án đúng</div>' : '') +
         '<div class="opts">' + it.options.map((o, d) => '<button class="optb" data-d="' + d + '"><span class="lt">' + LET[d] + '</span><span>' + o + '</span></button>').join('') + '</div>';
+    } else if (it.type === 'fill') {
+      body = '<div class="pill" style="margin-bottom:10px">Điền vào ' + (it.nb > 1 ? it.nb + ' chỗ trống' : 'chỗ trống') + '</div>';
     } else {
       body = '<div class="essay"><textarea id="essay" placeholder="Nhập bài làm của em…">' + esc(S.answers[i] || '') + '</textarea><div class="hint" id="cc"></div></div>';
     }
-    $('#qcard').innerHTML = '<div class="qnum">Câu ' + (i + 1) + (it.pts !== 1 ? ' · ' + it.pts + ' điểm' : '') + (it.type === 'essay' ? ' · Tự luận' : '') + '</div><div class="stem">' + it.stem + '</div>' + body +
-      '<div class="nav"><span class="muted" id="navHint" style="font-size:.88rem"></span><span class="spacer"></span><button class="btn primary" id="btnNext">' + (i === n - 1 ? 'Nộp bài' : 'Câu tiếp theo →') + '</button></div>';
+    const stemHtml = it.type === 'fill' ? it.stem.replace(/<span class="blank" data-b="(\d+)">[^<]*<\/span>/g, (m, k) => '<input type="text" class="blankin" data-b="' + k + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="(' + (+k + 1) + ')" value="' + esc(((S.answers[i] || [])[+k]) || '') + '">') : it.stem;
+    $('#qcard').innerHTML = '<div class="qnum">Câu ' + (i + 1) + (it.pts !== 1 ? ' · ' + it.pts + ' điểm' : '') + (it.type === 'essay' ? ' · Tự luận' : it.type === 'fill' ? ' · Điền khuyết' : '') + '</div><div class="stem">' + stemHtml + '</div>' + body +
+      (FREE()
+        ? '<div class="nav"><button class="btn" id="btnPrev"' + (i === 0 ? ' disabled' : '') + '>← Câu trước</button><button class="btn' + (S.flags[i] ? ' accent' : '') + '" id="btnFlag">' + (S.flags[i] ? '★ Đã đánh dấu' : '☆ Đánh dấu xem lại') + '</button><span class="spacer"></span><button class="btn primary" id="btnNext">' + (i === n - 1 ? 'Nộp bài' : 'Câu sau →') + '</button></div>'
+        : '<div class="nav"><span class="muted" id="navHint" style="font-size:.88rem"></span><span class="spacer"></span><button class="btn primary" id="btnNext">' + (i === n - 1 ? 'Nộp bài' : 'Câu tiếp theo →') + '</button></div>');
     const paint = () => $$('.optb').forEach(b => b.classList.toggle('sel', (S.answers[i] || []).includes(+b.dataset.d)));
     $$('.optb').forEach(b => b.onclick = () => {
       const d = +b.dataset.d;
       let a = S.answers[i] || [];
       if (it.multi) { a = a.includes(d) ? a.filter(x => x !== d) : a.concat(d).sort(); } else a = [d];
-      S.answers[i] = a; paint(); saveLocal(); $('#navHint').textContent = '';
+      S.answers[i] = a; paint(); saveLocal(); if ($('#navHint')) $('#navHint').textContent = ''; if (FREE()) { palette(); $('#progbar').style.width = (answeredCount() / n * 100) + '%'; }
     });
     paint();
+    const fins = $$('.blankin');
+    if (fins.length) {
+      fins.forEach(inp => inp.oninput = () => {
+        const a = (S.answers[i] && Array.isArray(S.answers[i])) ? S.answers[i].slice() : Array(it.nb).fill('');
+        a[+inp.dataset.b] = inp.value; S.answers[i] = a; saveLocal(); if (FREE()) { palette(); $('#progbar').style.width = (answeredCount() / n * 100) + '%'; }
+      });
+      fins.forEach((inp, k) => inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (fins[k + 1]) fins[k + 1].focus(); } });
+      setTimeout(() => fins[0].focus(), 50);
+    }
     const ta = $('#essay');
-    if (ta) { const cc = () => { $('#cc').textContent = ta.value.length + ' ký tự'; }; ta.oninput = () => { S.answers[i] = ta.value; cc(); saveLocal(); }; cc(); setTimeout(() => ta.focus(), 50); }
+    if (ta) { const cc = () => { $('#cc').textContent = ta.value.length + ' ký tự'; }; ta.oninput = () => { S.answers[i] = ta.value; cc(); saveLocal(); if (FREE()) palette(); }; cc(); setTimeout(() => ta.focus(), 50); }
+    if (FREE()) {
+      $('#btnNext').onclick = () => { if (i === n - 1) confirmSubmit(); else showQ(i + 1); };
+      $('#btnPrev').onclick = () => { if (i > 0) showQ(i - 1); };
+      $('#btnFlag').onclick = () => { S.flags[i] = !S.flags[i]; saveLocal(); showQ(i); };
+      palette();
+      window.scrollTo(0, 0);
+      return;
+    }
     let warned = false;
     $('#btnNext').onclick = () => {
-      const a = S.answers[i];
-      const empty = it.type === 'mc' ? !(a && a.length) : !(a && String(a).trim());
+      const empty = !isAnswered(i);
       if (i === n - 1) { confirmSubmit(); return; }
       if (empty && !warned) { warned = true; $('#navHint').textContent = 'Em chưa trả lời câu này. Bấm lần nữa để bỏ qua (không quay lại được).'; return; }
       next(false);
@@ -256,9 +283,39 @@
     window.scrollTo(0, 0);
   }
   function next() { if (!running) return; if (S.idx < S.items.length - 1) showQ(S.idx + 1); }
+  function FREE() { return info && info.navMode === 'free'; }
+  const isAnswered = (k) => { const a = S.answers[k], t = S.items[k].type; return t === 'mc' ? !!(a && a.length) : t === 'fill' ? !!(Array.isArray(a) && a.some(x => String(x || '').trim())) : !!(a && String(a).trim()); };
+  function answeredCount() { let c = 0; for (let k = 0; k < S.items.length; k++) if (isAnswered(k)) c++; return c; }
+  function palette() {
+    const el = $('#pal'); if (!el) return;
+    el.innerHTML = S.items.map((_, k) => '<button class="pb' + (isAnswered(k) ? ' ans' : '') + (S.flags[k] ? ' flag' : '') + (k === S.idx ? ' cur' : '') + '" data-k="' + k + '">' + (k + 1) + '</button>').join('');
+    $$('.pb', el).forEach(b => b.onclick = () => showQ(+b.dataset.k));
+  }
+  /** Đồng hồ tổng cho chế độ Tự do (0 = không giới hạn) */
+  function startTotalTimer() {
+    const total = info.totalSec || 0;
+    const end = !PREVIEW && info.window && info.window.end;
+    let deadline = total ? (S.startedAt || Date.now()) + total * 1000 : 0;
+    if (end && (!deadline || end < deadline)) deadline = end;
+    if (!deadline) { $('#tleft').textContent = '∞'; $('#ring').style.strokeDashoffset = '0'; return; }
+    const span = total ? total : Math.max(1, (deadline - srvNow()) / 1000);
+    let h = null;
+    const tick = () => {
+      if (!running || !$('#tleft')) { clearInterval(h); return; }
+      const l = (deadline - srvNow()) / 1000;
+      $('#tleft').textContent = fmtSec(Math.ceil(Math.max(0, l)));
+      $('#ring').style.strokeDashoffset = String(138.2 * (1 - Math.max(0, Math.min(1, l / span))));
+      const low = l <= Math.min(120, span * 0.1);
+      $('#timer').classList.toggle('low', low); $('#ring').style.stroke = low ? 'var(--bad)' : 'var(--brand-2)';
+      if (l <= 0) { clearInterval(h); submit('Hết giờ làm bài'); }
+    };
+    h = setInterval(tick, 500); timerH = h; tick();
+  }
   function confirmSubmit() {
-    const unanswered = S.answers.filter((a, k) => S.items[k].type === 'mc' ? !(a && a.length) : !(a && String(a).trim())).length;
-    $('#modalBody').innerHTML = '<h2>Nộp bài?</h2><p>' + (unanswered ? 'Em còn <b>' + unanswered + '</b> câu chưa trả lời. ' : 'Em đã trả lời tất cả các câu. ') + 'Sau khi nộp sẽ không sửa được nữa.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="mNo">Chưa nộp</button><button class="btn primary" id="mYes">Nộp bài</button></div>';
+    const un = [], fl = [];
+    S.items.forEach((_, k) => { if (!isAnswered(k)) un.push(k + 1); if (S.flags && S.flags[k]) fl.push(k + 1); });
+    const unanswered = un.length;
+    $('#modalBody').innerHTML = '<h2>Nộp bài?</h2><p>' + (unanswered ? 'Em còn <b>' + unanswered + '</b> câu chưa trả lời' + (FREE() ? ' (câu ' + un.slice(0, 30).join(', ') + (un.length > 30 ? '…' : '') + ')' : '') + '. ' : 'Em đã trả lời tất cả các câu. ') + (FREE() && fl.length ? 'Câu đánh dấu xem lại: <b>' + fl.join(', ') + '</b>. ' : '') + 'Sau khi nộp sẽ không sửa được nữa.</p><div class="row" style="justify-content:flex-end"><button class="btn" id="mNo">Chưa nộp</button><button class="btn primary" id="mYes">Nộp bài</button></div>';
     $('#modal').classList.add('on');
     $('#mNo').onclick = () => $('#modal').classList.remove('on');
     $('#mYes').onclick = () => { $('#modal').classList.remove('on'); submit(''); };
@@ -285,6 +342,13 @@
     app.innerHTML = header() + '<div class="wrap done"><div class="card"><h2>Chưa gửi được bài</h2><p>Bài làm đã được lưu tạm trên máy này. Hãy kiểm tra Internet rồi bấm gửi lại. <b>Không đóng trang.</b></p><button class="btn primary" id="retry">Gửi lại bài làm</button></div></div>';
     $('#retry').onclick = () => { submitting = false; app.innerHTML = '<div id="qcard"></div>'; submit(reason); };
   }
+  /** Hiện câu điền khuyết với câu trả lời của học sinh (xanh = đúng, đỏ = sai + đáp án đúng) */
+  function fillHtml(stem, given, oks, blanks) {
+    return stem.replace(/<span class="blank" data-b="(\d+)">[^<]*<\/span>/g, (m, k) => {
+      k = +k; const g = (given || [])[k] || '', ok = oks && oks[k];
+      return '<span class="fillans ' + (ok ? 'ok' : 'bad') + '">' + (esc(g) || '(bỏ trống)') + '</span>' + (ok ? '' : ' <span class="fillans ok">→ ' + esc((blanks[k] || []).join((blanks[k] || []).some(x => x.indexOf('/') >= 0) ? ' | ' : ' / ')) + '</span>');
+    });
+  }
   function gradePreview() {
     const g = QuizCore.grade(previewExam, S.paper, S.answers, {});
     return { score: g.score, right: g.mcRight, mcCount: g.mcCount, essayPending: g.essayPending, scale: info.scale, review: g };
@@ -297,7 +361,7 @@
     if (r.error) h += '<h2>Không nộp được</h2><div class="msg bad">' + esc(r.error) + '</div>';
     else {
       h += '<h2>' + (reason ? esc(reason) + ' — ' : '') + 'Đã nộp bài thành công</h2><p class="muted">' + esc(S.hoTen) + ' · ' + esc(S.lop) + '</p>';
-      if (r.score != null) h += '<div class="bigscore">' + String(r.score).replace('.', ',') + '<span style="font-size:1.2rem;color:var(--muted)"> / ' + (r.scale || 10) + '</span></div><p>Đúng <b>' + r.right + '/' + r.mcCount + '</b> câu trắc nghiệm' + (r.essayPending ? ' · ' + r.essayPending + ' câu tự luận chờ giáo viên chấm' : '') + '</p>';
+      if (r.score != null) h += '<div class="bigscore">' + String(r.score).replace('.', ',') + '<span style="font-size:1.2rem;color:var(--muted)"> / ' + (r.scale || 10) + '</span></div><p>Đúng <b>' + r.right + '/' + r.mcCount + '</b> câu' + (r.essayPending ? ' · ' + r.essayPending + ' câu tự luận chờ giáo viên chấm' : '') + '</p>';
       else h += '<p>Kết quả đã được gửi đến giáo viên.</p>';
       if (r.already) h += '<p class="hint">(Bài này đã được nộp trước đó.)</p>';
       if (r.attemptNo) h += '<p class="muted">Lần làm thứ ' + r.attemptNo + (r.maxAttempts ? ' / ' + r.maxAttempts + ' lần cho phép' : ' (luyện tập — không giới hạn số lần)') + '</p>';
@@ -308,13 +372,15 @@
     h += '</div>';
     if (!PREVIEW && r.review) {
       h += '<div class="card review" style="text-align:left"><h2>Xem lại bài làm &amp; đáp án</h2>' + r.review.map((d, i) => '<div class="qprev"><b>Câu ' + (i + 1) + '</b> ' +
-        (d.type === 'mc' ? '<span class="pill ' + (d.ok ? 'ok' : 'bad') + '">' + (d.ok ? 'Đúng' : 'Sai') + '</span><div>' + d.stem + '</div>' +
+        (d.type === 'fill' ? '<span class="pill ' + (d.ok ? 'ok' : 'bad') + '">' + (d.ok ? 'Đúng' : 'Chưa đúng hết') + '</span><div>' + fillHtml(d.stem, d.given, d.oks, d.blanks) + '</div>' :
+        d.type === 'mc' ? '<span class="pill ' + (d.ok ? 'ok' : 'bad') + '">' + (d.ok ? 'Đúng' : 'Sai') + '</span><div>' + d.stem + '</div>' +
           d.options.map((o, oi) => '<div class="opt' + (d.correct.includes(oi) ? ' ok' : d.chosen.includes(oi) ? ' badc' : '') + '">' + LET[oi] + ') ' + o + (d.correct.includes(oi) ? ' ✓' : '') + (d.chosen.includes(oi) ? ' ← em chọn' : '') + '</div>').join('')
           : '<span class="pill">Tự luận</span><div>' + d.stem + '</div><div class="msg info" style="white-space:pre-wrap">' + (esc(d.text) || '<i>(bỏ trống)</i>') + '</div>' + (d.answer ? '<div class="hint"><b>Đáp án gợi ý:</b> ' + d.answer + '</div>' : '')) + '</div>').join('') + '</div>';
     }
     if (PREVIEW && r.review) {
       h += '<div class="card review" style="text-align:left"><h2>Đáp án (chỉ hiện ở chế độ xem thử)</h2>' + r.review.details.map((d, i) => {
         const q = previewExam.banks[d.b].questions[d.q];
+        if (d.type === 'fill') return '<div class="qprev"><b>Câu ' + (i + 1) + '</b> <span class="pill ' + (d.ok ? 'ok' : 'bad') + '">' + (d.ok ? 'Đúng' : 'Chưa đúng hết') + '</span><div>' + fillHtml(q.stem, d.given, d.oks, q.blanks) + '</div></div>';
         return '<div class="qprev"><b>Câu ' + (i + 1) + '</b> ' + (d.type === 'mc' ? '<span class="pill ' + (d.ok ? 'ok' : 'bad') + '">' + (d.ok ? 'Đúng' : 'Sai') + '</span>' : '<span class="pill">Tự luận</span>') + '<div>' + q.stem + '</div>' +
           (d.type === 'mc' ? q.options.map((o, oi) => '<div class="opt' + (q.correct.includes(oi) ? ' ok' : d.chosen.includes(oi) ? ' badc' : '') + '">' + LET[oi] + ') ' + o + (q.correct.includes(oi) ? ' ✓' : '') + (d.chosen.includes(oi) ? ' ← đã chọn' : '') + '</div>').join('') : '<div class="hint">' + (q.answer || '') + '</div>') + '</div>';
       }).join('') + '</div>';

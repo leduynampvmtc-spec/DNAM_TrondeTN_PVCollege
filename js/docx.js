@@ -479,6 +479,8 @@
     function handlePara(segs) {
       const plain = plainOf(segs);
       if (!plain.trim() && !segs.some(s => s.t === 'img' || s.t === 'html')) return;
+      // Tiêu đề phần ("PHẦN I. TRẮC NGHIỆM", "Part 2", "--- HẾT ---") kết thúc câu đang đọc
+      if (/^[\s\u00A0]*(phần|phan|part)[\s\u00A0]+([ivx]+|\d+|[a-dA-D])\b|^[\s\u00A0]*[-–—*.]*[\s\u00A0]*(hết|het|the end)[\s\u00A0]*[-–—*.]*[\s\u00A0]*$/i.test(plain)) { cur = null; mode = 'stem'; return; }
       let m = plain.match(RE_Q);
       if (m) {
         newQ(+m[1], trimSegs(sliceSegs(segs, m[0].length, plain.length)), points(m[2]));
@@ -580,9 +582,38 @@
         item.pin = item.optText.map(t => PIN.test(t));
         if (!correct.length) item.warn = 'Chưa xác định được đáp án đúng';
       } else {
-        item.type = 'essay';
-        item.answer = segsToHtml(joinBlocks(q.ansText));
-        if (q.opts.length === 1) item.warn = 'Chỉ có 1 phương án — đang coi là câu tự luận';
+        // ---- Điền khuyết: [đáp án] trong câu, hoặc ___ / ..... + dòng "Đáp án: a; b" ----
+        const plain = plainOf(stemSegs);
+        const splitAlts = (t) => (t.indexOf('|') >= 0 ? t.split('|') : t.split('/')).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+        const br = Array.from(plain.matchAll(/\[([^\[\]\n]{1,160})\]/g));
+        let ranges = null, blanks = null;
+        if (br.length) { ranges = br.map(m => [m.index, m.index + m[0].length]); blanks = br.map(m => splitAlts(m[1])); }
+        else if (q.opts.length === 0 && q.ansText.length) {
+          const gaps = Array.from(plain.matchAll(/_{3,}|\.{4,}|(?:…\.*){2,}|…{1}\.{2,}/g));
+          if (gaps.length) {
+            const at = plainOf(joinBlocks(q.ansText)).replace(/\uFFFC/g, '').trim();
+            let parts;
+            if (/[;\n]/.test(at)) parts = at.split(/\s*[;\n]\s*/);
+            else if ((at.match(/(^|\s)\(?\d{1,2}\s*[).:]/g) || []).length >= 2) parts = at.split(/(?:^|\s)\(?\d{1,2}\s*[).:]\s*/);
+            else parts = gaps.length === 1 ? [at] : at.split(/\s*,\s*/);
+            parts = parts.map(x => x.replace(/^\(?\d{1,2}\s*[).:]\s*/, '').trim()).filter(Boolean);
+            if (parts.length === gaps.length) { ranges = gaps.map(m => [m.index, m.index + m[0].length]); blanks = parts.map(splitAlts); }
+            else item.warn = 'Có ' + gaps.length + ' chỗ trống nhưng dòng Đáp án có ' + parts.length + ' đáp án (ngăn cách bằng dấu ;) — đang coi là tự luận';
+          }
+        }
+        if (blanks && blanks.length && blanks.every(b => b.length)) {
+          const out = []; let pos = 0;
+          ranges.forEach((r, k) => { out.push(...sliceSegs(stemSegs, pos, r[0])); out.push({ t: 'html', html: '<span class="blank" data-b="' + k + '">(' + (k + 1) + ')</span>', s: '\uFFFC' }); pos = r[1]; });
+          out.push(...sliceSegs(stemSegs, pos, plain.length));
+          item.type = 'fill';
+          item.stem = segsToHtml(out);
+          item.text = plainOf(out).replace(/\uFFFC/g, '___').trim();
+          item.blanks = blanks;
+        } else {
+          item.type = 'essay';
+          item.answer = segsToHtml(joinBlocks(q.ansText));
+          if (q.opts.length === 1) item.warn = 'Chỉ có 1 phương án — đang coi là câu tự luận';
+        }
       }
       if (!item.text && !/img|omath/.test(item.stem)) item.warn = (item.warn ? item.warn + '; ' : '') + 'Nội dung câu hỏi trống';
       result.push(item);
