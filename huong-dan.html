@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hướng dẫn cài đặt</title>
+<meta name="description" content="Hướng dẫn cài đặt phần mềm Trộn đề thi Online — Lê Duy Nam, GV Trường Cao đẳng Dầu khí">
+<link rel="icon" href="img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .doc { max-width: 860px; margin: 24px auto 40px; }
+  .doc h2 { margin-top: 6px; display: flex; gap: 10px; align-items: center; }
+  .doc h2 .n { width: 32px; height: 32px; border-radius: 9px; background: var(--accent); color: #2a1d00; display: grid; place-items: center; font-size: 1rem; flex: none; }
+  .doc ol, .doc ul { padding-left: 22px; } .doc li { margin: 5px 0; }
+  code, kbd { font-family: ui-monospace, Menlo, Consolas, monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; font-size: .88em; }
+  pre { background: var(--soft); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow: auto; font-size: .85rem; }
+</style>
+</head>
+<body>
+<header class="topbar"><div class="wrap"><a class="brand" href="index.html"><span class="logo">Q</span><span>Trộn đề thi Online<small>Hướng dẫn cài đặt &amp; sử dụng</small></span></a><span class="spacer"></span><a class="btn sm" href="giaovien.html">Trang giáo viên</a></div></header>
+<main class="wrap doc">
+  <div class="card">
+    <p style="margin-top:0">Phần mềm gồm 3 phần: <b>(1) trang web</b> chạy trên GitHub Pages (mở bằng trình duyệt trên Windows, Mac, điện thoại), <b>(2) máy chủ Google Apps Script</b> gắn với 1 Google Sheet của thầy/cô để phát đề, chấm điểm và lưu kết quả, <b>(3) nút Quizz (App)</b> trong file KQHT (.xlsm) để nhập điểm. Phần (2) và (3) chỉ cài 1 lần.</p>
+    <div class="msg info">Không có máy chủ, thầy/cô vẫn dùng được nút <b>“Xem thử như học sinh”</b> để kiểm tra đề ngay trên máy.</div>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">1</span> Tạo máy chủ Google Apps Script (1 lần, khoảng 5 phút)</h2>
+    <ol>
+      <li>Vào <a href="https://sheets.google.com" target="_blank">sheets.google.com</a> → tạo bảng tính mới, đặt tên ví dụ <b>“Tron de thi – Ket qua”</b>.</li>
+      <li>Menu <b>Tiện ích mở rộng → Apps Script</b>. Xóa hết đoạn mã mẫu, dán <b>toàn bộ</b> nội dung file <code>apps-script/Code.gs</code>.</li>
+      <li>Ở dòng đầu, đổi mật khẩu giáo viên: <code>var TEACHER_KEY = 'PVCollege@2026';</code> → mật khẩu của thầy/cô. Bấm biểu tượng <b>Lưu</b>.</li>
+      <li>Ở ô chọn hàm phía trên, chọn <b>caiDat</b> → bấm <b>Chạy</b> → <b>Xem xét quyền</b> → chọn tài khoản Gmail → <b>Nâng cao</b> → <b>Đi tới … (không an toàn)</b> → <b>Cho phép</b>. (Đây là mã của chính thầy/cô nên Google cảnh báo như vậy.)</li>
+      <li>Bấm <b>Triển khai → Tùy chọn triển khai mới</b> → biểu tượng bánh răng → <b>Ứng dụng web</b>.
+        <ul><li>Thực thi với tư cách: <b>Tôi</b></li><li>Người có quyền truy cập: <b>Bất kỳ ai</b> (để học sinh không cần đăng nhập)</li></ul>
+        Bấm <b>Triển khai</b> → sao chép <b>URL ứng dụng web</b> (kết thúc bằng <code>/exec</code>).</li>
+      <li>Mở <a href="giaovien.html">Trang giáo viên</a> → <b>Cài đặt máy chủ</b> → dán URL + mật khẩu → <b>Lưu &amp; kiểm tra kết nối</b>.</li>
+    </ol>
+    <div class="msg warn">Khi cập nhật Code.gs sau này: <b>Triển khai → Quản lý các bản triển khai → ✎ Sửa → Phiên bản: Phiên bản mới → Triển khai</b>. Làm như vậy URL giữ nguyên, các link đã gửi vẫn dùng được.</div>
+    <p>Kết quả được lưu vào 3 trang tính trong Google Sheet: <b>DeThi</b> (đề), <b>LuotThi</b> (học sinh đang làm), <b>KetQua</b> (điểm). Đáp án chỉ nằm trên máy chủ, học sinh không xem được.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">2</span> Đưa trang web lên GitHub Pages</h2>
+    <ol>
+      <li>Đăng nhập <a href="https://github.com" target="_blank">github.com</a> → <b>New repository</b> → tên ví dụ <code>tron-de-thi</code> → chọn <b>Public</b> → Create.</li>
+      <li>Bấm <b>uploading an existing file</b> → kéo thả <b>toàn bộ nội dung</b> thư mục <code>web</code> (gồm <code>index.html</code>, <code>giaovien.html</code>, <code>thi.html</code>, <code>huong-dan.html</code>, thư mục <code>css</code>, <code>js</code>, <code>img</code>, …) → <b>Commit changes</b>.</li>
+      <li>Vào <b>Settings → Pages</b> → Source: <b>Deploy from a branch</b>, Branch: <b>main</b> / <b>(root)</b> → Save. Sau 1–2 phút trang chạy tại <code>https://&lt;tên-github&gt;.github.io/tron-de-thi/</code>.</li>
+      <li>(Tùy chọn) Sửa file <code>js/config.js</code>, điền URL <code>/exec</code> vào <code>window.QUIZ_API</code> để link gửi học sinh ngắn hơn và học sinh có thể vào bằng mã đề.</li>
+    </ol>
+    <p><b>Dùng như phần mềm trên Windows / Mac:</b> mở trang bằng Chrome hoặc Edge → biểu tượng <b>Cài đặt ứng dụng</b> trên thanh địa chỉ (hoặc menu ⋮ → <i>Cài đặt trang này dưới dạng ứng dụng</i>). Trên Mac dùng Safari: <b>Tệp → Thêm vào Dock</b>. Phần mềm sẽ có biểu tượng riêng như một ứng dụng.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">3</span> Soạn đề Word đúng định dạng</h2>
+    <p><b>Kiểu 1 — đoạn văn:</b> mỗi câu bắt đầu bằng <code>Câu 1:</code>, các phương án <code>A)</code> <code>B)</code> <code>C)</code> <code>D)</code> (hoặc <code>A.</code>), đáp án đúng là nhãn được <u>gạch chân</u> (cũng nhận nhãn tô đỏ / highlight / có dấu <code>*A)</code>). Có thể ghi nhiều phương án trên 1 dòng.</p>
+    <p><b>Kiểu 2 — bảng 2 cột:</b> hàng <code>1.</code> | nội dung câu hỏi; hàng <code>A)</code> | phương án; hàng <code>Đáp án</code> | <code>A</code> (nhiều đáp án: <code>A, C</code>).</p>
+    <p><b>Câu tự luận:</b> câu không có phương án A/B/C. Điểm ghi ngay sau số câu: <code>Câu 5 (2 điểm):</code>. Đáp án gợi ý ghi sau <code>Đáp án:</code> hoặc <code>Hướng dẫn chấm:</code>. Câu tự luận giáo viên chấm ở mục Kết quả → <b>Chấm / xem</b>.</p>
+    <p>Công thức MathType / Equation trong đề được hiển thị lại tự động. Phương án kiểu “Các đáp án còn lại đều đúng”, “Ý kiến khác”, “Tất cả…” được <b>giữ nguyên vị trí</b> khi trộn.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">4</span> Tạo đề và gửi link</h2>
+    <ol>
+      <li><b>Ngân hàng câu hỏi:</b> nạp các file .docx (mỗi file 1 ngân hàng). Bấm <b>Xem / sửa</b> để kiểm tra đáp án, đặt thời gian hoặc điểm riêng cho từng câu, bỏ bớt câu.</li>
+      <li><b>Tạo đề &amp; link:</b> nhập loại bài (kiểm tra thường xuyên, định kỳ, kiểm tra phần, thi thử kết thúc môn, đề thi lý thuyết mô đun…), tên môn học/mô đun, nội dung, lớp. Thêm nhóm câu hỏi: ví dụ <i>Ngẫu nhiên 60 câu</i> từ ngân hàng 1 + <i>Ngẫu nhiên 30 câu</i> từ ngân hàng 2, hoặc <i>Chỉ định</i> câu <code>1-10, 15</code>. Đặt số giây cho mỗi câu (chung hoặc riêng từng nhóm/từng câu).</li>
+      <li><b>Thời gian &amp; số lần làm bài:</b>
+        <ul><li><b>Bắt đầu cho vào làm từ</b>: trước giờ này học sinh mở link chỉ thấy đồng hồ đếm ngược, trang tự mở khi đến giờ.</li>
+        <li><b>Hết giờ vào làm lúc</b>: sau giờ này không cho vào làm nữa (em đang làm dở vẫn làm tiếp).</li>
+        <li><b>Kết thúc bài lúc</b>: đến giờ này mọi bài đang làm tự động nộp (đồng hồ “Kết thúc sau…” hiện trên màn hình học sinh).</li>
+        <li><b>Số lần được làm</b>: 1, 2, 3… lần (mỗi lần một đề trộn mới), hoặc tích <b>Không giới hạn (luyện tập)</b>. Chọn cách ghi điểm: lần cao nhất / lần cuối / lần đầu / trung bình. Có thể bật <b>Cho xem đáp án sau khi nộp</b> cho bài luyện tập.</li>
+        <li>Hai nút mẫu: <b>Kiểm tra / thi (1 lần)</b> và <b>Luyện tập (không giới hạn)</b> điền sẵn các lựa chọn phù hợp.</li></ul></li>
+      <li>Bấm <b>Xem thử như học sinh</b> để kiểm tra, rồi <b>Lưu đề lên máy chủ &amp; tạo link</b> → gửi link qua Zalo/Teams/Email. Mỗi học sinh mở link nhập <b>Họ và tên, Lớp</b> rồi nhận 1 đề riêng.</li>
+      <li><b>Kết quả:</b> xem điểm trực tiếp (tự cập nhật), ai đang làm câu nào, số lần vi phạm; <b>Đóng đề</b> khi hết giờ; <b>Cho làm lại</b> nếu cần; <b>Xuất Excel</b>. Khi học sinh làm nhiều lần, sheet <b>KetQua</b> chỉ có 1 dòng/học sinh theo cách ghi điểm đã chọn; sheet <b>TatCaLanLam</b> liệt kê mọi lần làm.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">5</span> Nhập điểm vào file KQHT (.xlsm) — nút Quizz (App)</h2>
+    <ol>
+      <li>Mở file <b>… - QuizApp.xlsm</b> (đã có sẵn nút <b>Quizz (App)</b> và <b>Mở App trộn đề</b> ở tab <b>Tính điểm</b>, nhóm <i>Điểm online</i>).</li>
+      <li>Nạp module 1 lần: <b>Windows</b> <kbd>Alt</kbd>+<kbd>F11</kbd> → <b>File → Import File…</b> → chọn <code>QuizApp_Nhap.bas</code>. <b>Mac</b>: <b>Công cụ → Macro → Trình soạn thảo Visual Basic</b> → <b>File → Import File…</b>. Đóng cửa sổ VBA và <b>Lưu</b> file.</li>
+      <li>Mỗi lần nhập điểm: trên web bấm <b>Xuất Excel</b> → trong file KQHT bấm <b>Quizz (App)</b> → chọn file <code>KetQua_….xlsx</code> (chọn được nhiều file) → gõ cột cần ghi (mặc định là cột trống kế tiếp; <code>P</code> = Thi LT). Điểm được ghép theo <b>Họ và tên</b> (không phân biệt dấu/hoa thường); em nào có nhiều bài lấy điểm cao nhất; em vắng được liệt kê và hỏi có ghi 0 không.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2><span class="n">!</span> Về chống chụp màn hình</h2>
+    <p>Trình duyệt web <b>không thể chặn tuyệt đối</b> việc chụp màn hình (nhất là chụp bằng điện thoại khác). Phần mềm áp dụng các biện pháp hạn chế và <b>ghi nhận vi phạm gửi về giáo viên</b>:</p>
+    <ul>
+      <li>Che kín nội dung ngay khi học sinh rời cửa sổ, chuyển tab/ứng dụng, mở công cụ cắt màn hình, thoát toàn màn hình; bấm <kbd>PrtSc</kbd> hoặc <kbd>⌘</kbd>+<kbd>Shift</kbd>+<kbd>3/4/5</kbd>.</li>
+      <li>Chặn chuột phải, bôi đen, sao chép, in trang; hình mờ <b>Họ tên – Lớp</b> phủ khắp màn hình (ảnh chụp lọt ra ngoài biết ngay của ai).</li>
+      <li>Đạt số lần vi phạm giáo viên đặt → tự động nộp bài. Mỗi câu chỉ hiện 1 lần, có đồng hồ riêng, không quay lại được.</li>
+    </ul>
+  </div>
+  <div class="card">__AUTHOR__</div>
+</main>
+<script src="js/common.js"></script>
+<script>document.body.innerHTML = document.body.innerHTML.replace('__AUTHOR__', QA.AUTHOR_HTML);</script>
+</body>
+</html>
