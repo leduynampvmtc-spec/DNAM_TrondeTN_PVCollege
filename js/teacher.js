@@ -144,9 +144,21 @@
     $('#s_shuffleOpts').checked = s.shuffleOpts !== false; $('#s_same').checked = !!s.sameForAll; $('#s_showScore').checked = s.showScore !== false;
     $('#s_full').checked = s.fullscreen !== false; $('#s_mssv').checked = !!s.requireMssv;
     $('#s_roster').value = (s.roster || []).join('\n'); $('#s_note').value = s.note || '';
+    const mu = s.music || {};
+    $('#s_music').value = mu.url || ''; $('#s_musicVol').value = mu.vol || 35; $('#musicVolTxt').textContent = ($('#s_musicVol').value) + '%'; $('#s_musicMute').checked = mu.allowMute !== false;
     $('#editingPill').textContent = draft.id ? 'Đang sửa đề ' + draft.id : 'Đề mới';
     winSummary();
   }
+  /* ---- nhạc nền: nghe thử ---- */
+  $('#s_music').addEventListener('input', () => { $('#musicMsg').innerHTML = ''; if (QA.Music.playing()) { QA.Music.stop(); $('#musicTest').textContent = '▶ Nghe thử'; } });
+  $('#s_musicVol').addEventListener('input', () => { $('#musicVolTxt').textContent = $('#s_musicVol').value + '%'; QA.Music.setVol(+$('#s_musicVol').value); });
+  $('#musicTest').onclick = async () => {
+    if (QA.Music.playing()) { QA.Music.stop(); $('#musicTest').textContent = '▶ Nghe thử'; return; }
+    const u = $('#s_music').value.trim(); if (!u) return toast('Hãy dán link nhạc trước', 'bad');
+    $('#musicMsg').innerHTML = '<div class="msg info">Đang mở nhạc…</div>';
+    const ok = await QA.Music.start(u, +$('#s_musicVol').value, (err) => { $('#musicMsg').innerHTML = '<div class="msg bad">' + esc(err) + '</div>'; $('#musicTest').textContent = '▶ Nghe thử'; });
+    if (ok) { $('#musicTest').textContent = '■ Dừng'; $('#musicMsg').innerHTML = '<div class="msg ok">' + (QA.Music.kind(u) === 'yt' ? 'Đang phát nhạc YouTube — nếu không nghe thấy sau vài giây, video có thể bị chặn nhúng.' : 'Đang phát — link nhạc dùng được.') + '</div>'; }
+  };
   function navUI() {
     const free = $('#s_nav').value === 'free', total = $('#s_ftime').value === 'total';
     $$('.freeOnly').forEach(e => e.classList.toggle('hide', !free));
@@ -188,7 +200,8 @@
       navMode: $('#s_nav').value, freeTime: $('#s_ftime').value, totalMin: +$('#s_tmin').value || 0,
       shuffleOpts: $('#s_shuffleOpts').checked, sameForAll: $('#s_same').checked, showScore: $('#s_showScore').checked,
       fullscreen: $('#s_full').checked, requireMssv: $('#s_mssv').checked,
-      roster: $('#s_roster').value.split(/\r?\n/).map(x => x.replace(/\t/g, ' ').trim()).filter(Boolean), note: $('#s_note').value.trim()
+      roster: $('#s_roster').value.split(/\r?\n/).map(x => x.replace(/\t/g, ' ').trim()).filter(Boolean), note: $('#s_note').value.trim(),
+      music: $('#s_music').value.trim() ? { url: $('#s_music').value.trim(), vol: +$('#s_musicVol').value || 35, allowMute: $('#s_musicMute').checked } : null
     };
     LS.set('draft', draft);
   }

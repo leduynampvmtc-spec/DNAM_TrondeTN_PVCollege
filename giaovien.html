@@ -155,6 +155,16 @@
         <div><label>Danh sách lớp (không bắt buộc)</label><textarea id="s_roster" placeholder="Mỗi dòng 1 học sinh — dán cột Họ và tên từ Excel. Có danh sách thì chỉ những em trong danh sách mới vào làm được."></textarea></div>
         <div><label>Lời dặn cho học sinh (không bắt buộc)</label><textarea id="s_note" placeholder="VD: Không được sử dụng tài liệu."></textarea></div>
       </div>
+      <div class="musicbox">
+        <label>Nhạc nền khi làm bài (không bắt buộc)</label>
+        <div class="row" style="flex-wrap:nowrap"><input type="url" id="s_music" placeholder="Dán link YouTube, link Google Drive hoặc link file .mp3"><button class="btn sm" id="musicTest" type="button">▶ Nghe thử</button></div>
+        <div class="row" style="margin-top:8px">
+          <label class="check" style="font-weight:600">Âm lượng <input type="range" id="s_musicVol" min="5" max="100" step="5" value="35" style="width:160px;accent-color:var(--brand-2)"> <span id="musicVolTxt">35%</span></label>
+          <label class="check"><input type="checkbox" id="s_musicMute" checked> Cho học sinh tắt / bật nhạc</label>
+        </div>
+        <div class="hint">YouTube: video phải cho phép nhúng (đa số video nhạc không lời đều được). Google Drive: file phải chia sẻ “Bất kỳ ai có đường liên kết”. Nhạc phát lặp lại đến khi nộp bài.</div>
+        <div id="musicMsg"></div>
+      </div>
     </div>
 
     <div class="card">
@@ -211,7 +221,7 @@
 
 <div class="modal-bg" id="modal"><div class="modal" id="modalBody"></div></div>
 
-<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.3</span></div></footer>
+<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.4</span></div></footer>
 
 <script src="js/config.js"></script>
 <script src="js/common.js"></script>

@@ -60,7 +60,7 @@
         ? '<li>Mỗi lần hiện <b>1 câu</b>. Em <b>được quay lại</b> xem và sửa các câu trước, bấm số câu để chuyển nhanh, dùng “Đánh dấu xem lại” cho câu chưa chắc.' + (info.totalSec ? ' Hết <b>' + fmtDur(info.totalSec) + '</b> bài tự nộp.' : '') + '</li>'
         : '<li>Mỗi lần chỉ hiện <b>1 câu</b>, có đồng hồ đếm ngược. Hết giờ sẽ tự chuyển câu. <b>Không quay lại</b> được câu trước.</li>') +
       '<li>Không rời khỏi cửa sổ làm bài, không chụp màn hình. Mọi lần vi phạm đều được ghi nhận và gửi giáo viên' + (info.maxViolations ? '; vi phạm <b>' + info.maxViolations + ' lần</b> bài sẽ tự nộp' : '') + '.</li>' +
-      (info.note ? '<li>' + esc(info.note) + '</li>' : '') + '</ul>' +
+      (info.note ? '<li>' + esc(info.note) + '</li>' : '') + (info.music && info.music.url ? '<li>Bài làm có <b>nhạc nền</b>' + (info.music.allowMute ? ' (em có thể tắt/bật bằng nút 🔊 Nhạc)' : '') + ' — nên đeo tai nghe nếu làm bài cùng phòng.</li>' : '') + '</ul>' +
       '<label class="check" style="margin:12px 0"><input type="checkbox" id="agree"> Tôi đã đọc quy định và cam kết tự làm bài.</label>' +
       '<div id="winMsg"></div><div id="startMsg"></div><button class="btn primary" id="btnStart" style="width:100%;padding:13px;font-size:1.05rem">Bắt đầu làm bài</button></div>' +
       '<div class="card">' + QA.AUTHOR_HTML + '</div></div>';
@@ -97,6 +97,7 @@
     if (!$('#agree').checked) return msg('Hãy đánh dấu cam kết trước khi làm bài.');
     LS.set('student', { hoTen, lop, mssv });
     if (info.fullscreen) enterFull();
+    if (info.music && info.music.url) { QA.Music.setMuted(!!(info.music.allowMute && LS.get('musicMuted', false))); QA.Music.start(info.music.url, info.music.vol); }
     $('#btnStart').disabled = true; $('#btnStart').textContent = 'Đang nhận đề…';
     try {
       if (PREVIEW) {
@@ -123,7 +124,7 @@
       beginExam();
     } catch (e) {
       $('#btnStart').disabled = false; $('#btnStart').textContent = 'Bắt đầu làm bài';
-      msg(e.message); exitFull();
+      msg(e.message); exitFull(); QA.Music.stop();
     }
   }
 
@@ -183,10 +184,16 @@
     document.body.classList.add('exam');
     watermark();
     app.innerHTML = '<div class="qbar"><div class="wrap"><div class="timer" id="timer"><svg width="52" height="52"><circle cx="26" cy="26" r="22" fill="none" stroke="var(--line)" stroke-width="5"/><circle id="ring" cx="26" cy="26" r="22" fill="none" stroke="var(--brand-2)" stroke-width="5" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="0"/></svg><b id="tleft"></b></div>' +
-      '<div><div style="font-weight:700" id="qpos"></div><div class="muted" style="font-size:.84rem">' + esc(S.hoTen) + ' · ' + esc(S.lop) + '</div></div><span class="spacer"></span><span class="pill warn hide" id="endChip"></span><span class="pill" id="vbadge"></span>' + (FREE() ? '<button class="btn sm primary" id="barSubmit">Nộp bài</button>' : '') + '</div><div class="prog"><i id="progbar"></i></div></div>' +
+      '<div><div style="font-weight:700" id="qpos"></div><div class="muted" style="font-size:.84rem">' + esc(S.hoTen) + ' · ' + esc(S.lop) + '</div></div><span class="spacer"></span><span class="pill warn hide" id="endChip"></span><span class="pill" id="vbadge"></span>' + (info.music && info.music.url && info.music.allowMute ? '<button class="btn sm" id="musicBtn" title="Tắt / bật nhạc nền"></button>' : '') + (FREE() ? '<button class="btn sm primary" id="barSubmit">Nộp bài</button>' : '') + '</div><div class="prog"><i id="progbar"></i></div></div>' +
       '<div class="wrap"><div class="card qcard" id="qcard"></div>' + (FREE() ? '<div class="card qcard pal-card"><div class="row" style="margin-bottom:8px"><b>Danh sách câu</b><span class="spacer"></span><span class="hint" style="margin:0"><span class="lg ans"></span> đã làm <span class="lg flag"></span> xem lại <span class="lg"></span> chưa làm</span></div><div class="pal" id="pal"></div></div>' : '') +
       '<div style="max-width:860px;margin:0 auto 30px">' + QA.AUTHOR_HTML + '</div></div>';
     if (FREE()) { $('#barSubmit').onclick = confirmSubmit; startTotalTimer(); }
+    const mb = $('#musicBtn');
+    if (mb) {
+      const paintM = () => { mb.textContent = QA.Music.muted() ? '🔇 Nhạc' : '🔊 Nhạc'; };
+      mb.onclick = () => { QA.Music.setMuted(!QA.Music.muted()); LS.set('musicMuted', QA.Music.muted()); if (!QA.Music.playing()) QA.Music.start(info.music.url, info.music.vol); paintM(); };
+      paintM();
+    }
     showQ(S.idx, S.resumeRemain);
     const end = !PREVIEW && info.window && info.window.end;
     if (end) {
@@ -354,7 +361,7 @@
     return { score: g.score, right: g.mcRight, mcCount: g.mcCount, essayPending: g.essayPending, scale: info.scale, review: g };
   }
   function done(r, reason) {
-    exitFull();
+    exitFull(); QA.Music.stop();
     document.body.classList.remove('exam');
     $('#shield').classList.remove('on'); $('#wm').style.backgroundImage = 'none';
     let h = header() + '<div class="wrap done"><div class="card">';

@@ -145,5 +145,74 @@
   }
   const AUTHOR_HTML = '<div class="author"><img src="img/avatar-nam.jpg" alt="Lê Duy Nam"><div><b>Phần mềm được tạo bởi Lê Duy Nam</b><span>Giảng viên Trường Cao đẳng Dầu khí (PV College)</span></div></div>';
 
-  root.QA = { $, $$, esc, LS, IDB, api, apiFromParams, linkParamForApi, buildXlsx, download, fmtSec, fmtDur, fmtTime, toast, colName, AUTHOR_HTML };
+  /* ------------------------------- nhạc nền ------------------------------- */
+  const Music = (() => {
+    let audio = null, yt = null, ytReady = null, vol = 35, muted = false, on = false;
+    function parse(url) {
+      url = String(url || '').trim(); if (!url) return null;
+      let m = url.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/|music\.youtube\.com\/watch\?(?:.*&)?v=)([\w-]{11})/);
+      const list = (url.match(/[?&]list=([\w-]+)/) || [])[1];
+      if (m) return { kind: 'yt', id: m[1], list };
+      if (/youtube\.com/.test(url) && list) return { kind: 'yt', list };
+      m = url.match(/drive\.google\.com\/(?:file\/d\/|open\?(?:.*&)?id=|uc\?(?:.*&)?id=)([\w-]{20,})/);
+      if (m) return { kind: 'audio', src: 'https://drive.google.com/uc?export=download&id=' + m[1], drive: true };
+      if (/dropbox\.com/.test(url)) return { kind: 'audio', src: url.replace(/([?&])dl=0/, '$1raw=1') };
+      return { kind: 'audio', src: url };
+    }
+    function loadYT() {
+      if (ytReady) return ytReady;
+      ytReady = new Promise((res, rej) => {
+        if (root.YT && root.YT.Player) return res();
+        const prev = root.onYouTubeIframeAPIReady;
+        root.onYouTubeIframeAPIReady = () => { if (prev) prev(); res(); };
+        const sc = document.createElement('script'); sc.src = 'https://www.youtube.com/iframe_api';
+        sc.onerror = () => { ytReady = null; rej(new Error('Không tải được YouTube')); };
+        document.head.appendChild(sc);
+      });
+      return ytReady;
+    }
+    function host() {
+      let h = document.getElementById('ytMusic');
+      if (!h) { h = document.createElement('div'); h.id = 'ytMusic'; h.setAttribute('aria-hidden', 'true'); h.style.cssText = 'position:fixed;left:-10000px;top:0;width:220px;height:220px;opacity:0;pointer-events:none;overflow:hidden'; document.body.appendChild(h); }
+      h.innerHTML = '<div id="ytMusicPlayer"></div>';
+      return h;
+    }
+    function stop() {
+      on = false;
+      if (audio) { try { audio.pause(); } catch (e) { /* bỏ qua */ } audio.src = ''; audio = null; }
+      if (yt) { try { yt.destroy(); } catch (e) { /* bỏ qua */ } yt = null; }
+      const h = document.getElementById('ytMusic'); if (h) h.innerHTML = '';
+    }
+    /** Phát nhạc (gọi ngay trong sự kiện bấm nút để trình duyệt cho phép phát tiếng) */
+    async function start(url, volume, onErr) {
+      stop();
+      const p = parse(url); if (!p) return false;
+      vol = Math.max(0, Math.min(100, +volume || 35));
+      const fail = (msg) => { on = false; if (onErr) onErr(msg); };
+      if (p.kind === 'audio') {
+        audio = new Audio(); audio.loop = true; audio.preload = 'auto'; audio.volume = vol / 100; audio.muted = muted;
+        audio.onerror = () => fail(p.drive ? 'Không phát được file Google Drive — kiểm tra file đã chia sẻ “Bất kỳ ai có đường liên kết” và là file nhạc (mp3/m4a).' : 'Không phát được link nhạc này — cần link trực tiếp tới file .mp3/.m4a/.ogg, link YouTube hoặc Google Drive.');
+        audio.src = p.src;
+        try { await audio.play(); on = true; return true; } catch (e) { if (e && e.name === 'NotAllowedError') fail('Trình duyệt chặn tự phát nhạc — bấm nút 🔊 để bật.'); return false; }
+      }
+      try { await loadYT(); } catch (e) { fail('Không tải được YouTube (mạng chặn YouTube?).'); return false; }
+      host();
+      on = true;
+      const pv = { autoplay: 1, controls: 0, disablekb: 1, playsinline: 1, rel: 0, loop: 1, fs: 0, iv_load_policy: 3 };
+      if (p.list) { pv.listType = 'playlist'; pv.list = p.list; } else pv.playlist = p.id;
+      yt = new root.YT.Player('ytMusicPlayer', {
+        width: 220, height: 220, videoId: p.id || undefined, playerVars: pv,
+        events: {
+          onReady: (e) => { try { e.target.setVolume(vol); if (muted) e.target.mute(); e.target.playVideo(); } catch (x) { /* bỏ qua */ } },
+          onError: (e) => fail(e && (e.data === 101 || e.data === 150) ? 'Video YouTube này không cho phát nhúng — hãy chọn video khác.' : 'Không phát được video YouTube này (link sai hoặc video bị xóa).')
+        }
+      });
+      return true;
+    }
+    function setVol(v) { vol = Math.max(0, Math.min(100, +v || 0)); if (audio) audio.volume = vol / 100; if (yt && yt.setVolume) try { yt.setVolume(vol); } catch (e) { /* bỏ qua */ } }
+    function setMuted(m) { muted = !!m; if (audio) audio.muted = muted; if (yt && yt.mute) try { muted ? yt.mute() : (yt.unMute(), yt.playVideo()); } catch (e) { /* bỏ qua */ } if (!muted && audio && audio.paused) audio.play().catch(() => {}); }
+    return { start, stop, setVol, setMuted, muted: () => muted, playing: () => on, kind: (u) => (parse(u) || {}).kind };
+  })();
+
+  root.QA = { Music, $, $$, esc, LS, IDB, api, apiFromParams, linkParamForApi, buildXlsx, download, fmtSec, fmtDur, fmtTime, toast, colName, AUTHOR_HTML };
 })(window);

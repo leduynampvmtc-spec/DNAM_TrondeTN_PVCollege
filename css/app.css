@@ -102,3 +102,4 @@ input.blankin, .blankin { display: inline-block !important; width: 150px !import
 .blankin:focus { box-shadow: none !important; background: rgba(15,90,133,.10) !important; }
 .fillans { display: inline-block; padding: 0 7px; border-radius: 6px; font-weight: 700; }
 .fillans.ok { background: var(--ok-bg); color: var(--ok); } .fillans.bad { background: var(--bad-bg); color: var(--bad); text-decoration: line-through; }
+.musicbox { margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 12px; background: var(--soft); }

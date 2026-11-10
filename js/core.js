@@ -237,7 +237,8 @@ function QC_publicInfo(exam) {
     maxViolations: +st.maxViolations || 0, fullscreen: st.fullscreen !== false,
     showScore: st.showScore !== false, scale: +st.scale || 10,
     window: QC_window(st), maxAttempts: QC_maxAttempts(st), showReview: !!st.showReview,
-    note: st.note || ''
+    note: st.note || '',
+    music: st.music && st.music.url ? { url: String(st.music.url), vol: +st.music.vol || 35, allowMute: st.music.allowMute !== false } : null
   };
 }
 
