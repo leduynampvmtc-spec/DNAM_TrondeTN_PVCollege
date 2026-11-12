@@ -143,6 +143,8 @@
     t.style.background = kind === 'bad' ? '#c0362c' : kind === 'ok' ? '#138a52' : '#0b3d5c'; t.style.color = '#fff'; t.style.opacity = '1';
     clearTimeout(t._h); t._h = setTimeout(() => { t.style.opacity = '0'; }, kind === 'bad' ? 5200 : 2800);
   }
+  /** Đang chạy trong phần mềm Windows/Mac? (ứng dụng gắn dấu hiệu vào User-Agent) */
+  const isApp = /TronDeThiApp\//.test(navigator.userAgent || '');
   const AUTHOR_HTML = '<div class="author"><img src="img/avatar-nam.jpg" alt="Lê Duy Nam"><div><b>Phần mềm được tạo bởi Lê Duy Nam</b><span>Giảng viên Trường Cao đẳng Dầu khí (PV College)</span></div></div>';
 
   /* ------------------------------- nhạc nền ------------------------------- */
@@ -214,5 +216,5 @@
     return { start, stop, setVol, setMuted, muted: () => muted, playing: () => on, kind: (u) => (parse(u) || {}).kind };
   })();
 
-  root.QA = { Music, $, $$, esc, LS, IDB, api, apiFromParams, linkParamForApi, buildXlsx, download, fmtSec, fmtDur, fmtTime, toast, colName, AUTHOR_HTML };
+  root.QA = { isApp, Music, $, $$, esc, LS, IDB, api, apiFromParams, linkParamForApi, buildXlsx, download, fmtSec, fmtDur, fmtTime, toast, colName, AUTHOR_HTML };
 })(window);

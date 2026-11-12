@@ -13,7 +13,8 @@
 <style>
   .grp { display: grid; grid-template-columns: 1.6fr 1fr .8fr 1fr .8fr .7fr auto auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 11px; margin-bottom: 8px; background: var(--soft); }
   .grp label { font-size: .76rem; }
-  @media (max-width: 900px) { .grp { grid-template-columns: 1fr 1fr; } }
+  .grp.en { grid-template-columns: 1.5fr .9fr 1fr .8fr 1fr .8fr .7fr auto auto; }
+  @media (max-width: 900px) { .grp, .grp.en { grid-template-columns: 1fr 1fr; } }
   .bank { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
   .bank .nm { flex: 1 1 260px; min-width: 0; }
   .bank .nm input { font-weight: 600; }
@@ -37,6 +38,7 @@
       <button class="tab" data-tab="build">2. Tạo đề &amp; link</button>
       <button class="tab" data-tab="results">3. Kết quả</button>
       <button class="tab" data-tab="setup">Cài đặt máy chủ</button>
+      <a class="tab swmode" href="tienganh.html">Đề Tiếng Anh →</a>
     </nav>
   </div>
 </header>
@@ -151,6 +153,10 @@
         <label class="check"><input type="checkbox" id="s_mssv"> Bắt buộc nhập Mã số HSSV</label>
         <label class="check"><input type="checkbox" id="s_review"> Cho xem đáp án sau khi nộp</label>
       </div>
+      <div class="msg info" style="margin-top:12px">
+        <label class="check" style="font-weight:600"><input type="checkbox" id="s_requireApp"> Bắt buộc làm bằng phần mềm Trộn đề thi Online trên máy tính (Windows / Mac)</label>
+        <div class="hint">Dùng cho thi ở phòng máy của Trường đã cài phần mềm (chặn chụp màn hình thật). Bật ô này thì học sinh mở link bằng điện thoại / trình duyệt sẽ <b>không vào làm được</b>. Để trống khi học sinh làm trên điện thoại.</div>
+      </div>
       <div class="grid g2" style="margin-top:12px">
         <div><label>Danh sách lớp (không bắt buộc)</label><textarea id="s_roster" placeholder="Mỗi dòng 1 học sinh — dán cột Họ và tên từ Excel. Có danh sách thì chỉ những em trong danh sách mới vào làm được."></textarea></div>
         <div><label>Lời dặn cho học sinh (không bắt buộc)</label><textarea id="s_note" placeholder="VD: Không được sử dụng tài liệu."></textarea></div>
@@ -221,7 +227,7 @@
 
 <div class="modal-bg" id="modal"><div class="modal" id="modalBody"></div></div>
 
-<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.4</span></div></footer>
+<footer class="foot"><div class="wrap row"><div id="authorBox"></div><span class="spacer"></span><span>Trộn đề thi Online · v1.6</span></div></footer>
 
 <script src="js/config.js"></script>
 <script src="js/common.js"></script>
