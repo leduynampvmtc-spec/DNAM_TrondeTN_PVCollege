@@ -664,8 +664,9 @@
   const bookCtx = {
     modal, closeModal, needConn, saveBanks, audioPanel, bindAudioPanel,
     api: (body) => api(conf().api, Object.assign({ key: conf().key }, body), 1),
-    created: async (bank) => {
+    created: async (bank, opt) => {
       banks.push(bank); await saveBanks();
+      if (opt && opt.quiet) return; // nạp nhiều đề một lần: không hỏi thay bài thi đang soạn
       const ks = ['L', 'R', 'S'].filter(k => bank.questions.some(q => q.skill === k));
       const spk = ks.length === 1 && ks[0] === 'S';
       const mins = spk ? Math.max(10, Math.ceil(bank.questions.reduce((s, q) => s + (q.rec || 60) + (q.prep || 0) + 20, 0) / 60)) : ks.length > 1 ? 120 : ks[0] === 'L' ? 45 : 75;
