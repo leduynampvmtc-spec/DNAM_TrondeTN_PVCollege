@@ -359,6 +359,15 @@
     }
     return new Blob(bufs, { type: 'audio/mpeg' });
   }
+  /** Thời lượng (giây) của 1 file nghe */
+  function audioDur(file) {
+    return new Promise(res => {
+      const a = new Audio(), u = URL.createObjectURL(file); let done = false;
+      const fin = (v) => { if (done) return; done = true; URL.revokeObjectURL(u); res(v); };
+      a.preload = 'metadata'; a.onloadedmetadata = () => fin(isFinite(a.duration) ? a.duration : 0); a.onerror = () => fin(0);
+      setTimeout(() => fin(0), 10000); a.src = u;
+    });
+  }
   /** File "câu đầu mỗi trang": dòng "LC …: ,1,3,5" và "RC …: 101,109" */
   function parseFirstLists(txt) {
     const out = {};
@@ -376,9 +385,9 @@
       const km = parseKey(st.keyText), kn = Object.keys(km).length;
       ctx.modal('<div class="row"><h2 style="margin:0">Nạp đề TOEIC nguyên bộ</h2><span class="spacer"></span><button class="btn sm" id="bkClose">Đóng</button></div>' +
         '<p class="hint">Dùng cho bộ đề TOEIC / ETS có sẵn: <b>file PDF đề</b> (LC, RC), <b>đáp án</b> và <b>file nghe theo Part</b>. Học sinh xem đúng trang đề gốc trên điện thoại/máy tính, chọn đáp án ở phiếu trả lời ngay dưới trang đề, file nghe tự phát lần lượt Part 1 → 4. Có thể chọn thẳng file <b>.zip</b> của bộ đề. <b>Mới:</b> chọn thêm file <b>KEY / SCRIPT AND KEY (.pdf)</b> — phần mềm tự đọc đáp án, không phải gõ; file <b>TRANSCRIPT</b> tự bỏ qua; file nghe từng câu tự gộp theo Part; sách nhiều Test thì điền <b>Trang … – …</b> để lấy riêng từng Test.</p>' +
-        '<label class="drop" id="bkDrop" for="bkIn"><b>Kéo thả hoặc bấm để chọn file</b> — .zip bộ đề, hoặc các file .pdf, .mp3, file đáp án (.docx / .txt / ảnh)<div class="hint">Chọn được nhiều file cùng lúc.</div></label><input type="file" id="bkIn" class="hide" multiple accept=".zip,.pdf,.docx,.txt,.csv,audio/*,image/*,.mp3,.m4a,.wav"><div class="hint" style="margin-top:4px">Hoặc <label for="bkDir" style="color:var(--brand-2);text-decoration:underline;cursor:pointer">chọn cả một thư mục</label> (vd thư mục ETS 2026 PUBLIC có nhiều Test).</div><input type="file" id="bkDir" class="hide" webkitdirectory multiple>' +
+        '<label class="drop" id="bkDrop" for="bkIn"><b>Kéo thả hoặc bấm để chọn file</b> — .zip bộ đề, hoặc các file .pdf, .mp3, file đáp án (.docx / .txt / ảnh)<div class="hint">Chọn được nhiều file cùng lúc.</div></label><input type="file" id="bkIn" class="hide" multiple accept=".zip,.pdf,.docx,.txt,.csv,audio/*,image/*,.mp3,.m4a,.wav"><div class="hint" style="margin-top:4px">Hoặc <label for="bkDir" style="display:inline;margin:0;font-weight:600;color:var(--brand-2);text-decoration:underline;cursor:pointer">chọn cả một thư mục</label> (vd thư mục ETS 2026 PUBLIC có nhiều Test).</div><input type="file" id="bkDir" class="hide" webkitdirectory multiple>' +
         (lastMulti ? '<div class="msg info multi"><b>' + esc(lastMulti.name) + '</b> có <b>' + lastMulti.tests.length + ' đề</b> — chọn đề cần nạp (mỗi lần 1 đề; nạp xong mở lại sẽ chọn tiếp đề khác):<div class="mtests">' + lastMulti.tests.map(n => '<button class="btn sm' + (st.curTest === n ? ' primary' : '') + '" data-mt="' + n + '">Test ' + String(n).padStart(2, '0') + (lastMulti.done[n] ? ' ✓' : '') + '</button>').join('') + '</div>' +
-          '<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><button class="btn primary" id="bkAll">⚡ Nạp tất cả ' + lastMulti.tests.filter(n => !lastMulti.done[n]).length + ' đề còn lại một lần</button><span class="hint">Mỗi Test thành 1 ngân hàng riêng: tự tìm trang, đáp án, file nghe rồi lưu lên Drive (khoảng 1–2 phút / đề). Để nguyên cửa sổ đến khi xong.</span></div><div id="bkBatch"></div></div>' : '') +
+          (lastMulti.tests.every(n => lastMulti.done[n]) ? '<div class="hint" style="margin-top:8px">Đã nạp xong tất cả các đề trong file này.</div>' : '<div class="row" style="margin-top:10px;gap:8px;flex-wrap:wrap"><button class="btn primary" id="bkAll">⚡ Nạp tất cả ' + lastMulti.tests.filter(n => !lastMulti.done[n]).length + ' đề' + (lastMulti.tests.some(n => lastMulti.done[n]) ? ' còn lại' : '') + ' một lần</button><span class="hint">Mỗi Test thành 1 ngân hàng riêng: tự tìm trang, đáp án, file nghe rồi lưu lên Drive (khoảng 1–2 phút / đề). Để nguyên cửa sổ đến khi xong.</span></div>') + '<div id="bkBatch"></div></div>' : '') +
         '<div id="bkMsg">' + st.msgs.map(m => '<div class="msg ' + m[0] + '">' + m[1] + '</div>').join('') + '</div>' +
         (st.pdfs.length || st.auds.length ? '<div class="grid g2" style="margin-top:10px">' +
           '<div><h3 style="margin:4px 0">📄 File đề PDF</h3>' + (st.pdfs.length ? '<table class="tbl">' + st.pdfs.map((p, i) => '<tr data-pi="' + i + '"><td>' + esc(p.file.name) + '<div class="hint">' + (p.all ? 'File có ' + p.all + ' trang' + (p.count && p.count !== p.all ? ' — lấy ' + p.count + ' trang' : '') : '') + '</div></td><td>' + secSel(p.sec) + '<div class="pgrange">Trang <input type="number" min="1" data-pfrom value="' + esc(p.from || '') + '" placeholder="đầu"> – <input type="number" min="1" data-pto value="' + esc(p.to || '') + '" placeholder="cuối"></div></td></tr>').join('') + '</table><div class="hint">Sách có nhiều Test: điền <b>từ trang … đến trang …</b> để lấy riêng Test 1, Test 2… (bỏ trống = lấy cả file).</div>' : '<div class="msg warn">Chưa có file PDF đề.</div>') + '</div>' +
@@ -631,7 +640,12 @@
         for (const pt of ['1', '2', '3', '4', 'all']) {
           const g = st.auds.filter(a => a.part === pt);
           if (g.length === 1) list.push(g[0]);
-          else if (g.length > 1) { up('Đang gộp ' + g.length + ' file nghe Part ' + pt + '…'); const b = await joinMp3(g.sort((x, y) => x.num - y.num || x.file.name.localeCompare(y.file.name)).map(a => a.file)); list.push({ part: pt, file: new File([b], (bank.name.replace(/[^\w\- ]+/g, '').slice(0, 40) || 'TOEIC') + ' - Part ' + pt + '.mp3', { type: 'audio/mpeg' }) }); }
+          else if (g.length > 1) {
+            up('Đang gộp ' + g.length + ' file nghe Part ' + pt + '…');
+            g.sort((x, y) => x.num - y.num || x.file.name.localeCompare(y.file.name));
+            // mốc thời gian của từng đoạn nghe → học sinh được tự lật trang khi sang đoạn có câu ở trang sau
+            if (g.every(a => a.num)) { let tt = 0; const mk = []; for (const a of g) { mk.push({ n: a.num, t: Math.round(tt * 10) / 10 }); const d = await audioDur(a.file); if (!d) { mk.length = 0; break; } tt += d; } if (mk.length) (bank.book.marks = bank.book.marks || {})[pt] = mk; }
+            const b = await joinMp3(g.map(a => a.file)); list.push({ part: pt, file: new File([b], (bank.name.replace(/[^\w\- ]+/g, '').slice(0, 40) || 'TOEIC') + ' - Part ' + pt + '.mp3', { type: 'audio/mpeg' }) }); }
         }
         for (const a of list) {
           if (!a.part) continue;
