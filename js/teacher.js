@@ -550,8 +550,47 @@
   const expPol = () => ($('#exPolicy') && $('#exPolicy').value) || ((curExam && curExam.settings) || {}).scorePolicy || 'max';
   const isExtra = (r) => { const m = QuizCore.maxAttempts((curExam && curExam.settings) || {}); return m > 0 && (+r['Lần'] || 1) > m; };
   if ($('#exPolicy')) $('#exPolicy').onchange = () => { if (curData) renderResults(); };
+  /* ---- v2.6: giờ bắt đầu / kết thúc, vào muộn, hết giờ kiểu nào, vi phạm gì lúc nào ---- */
+  const toMs = (t) => { if (!t) return 0; const d = new Date(typeof t === 'number' || /^\d+$/.test(String(t)) ? +t : t); return isNaN(d) ? 0 : d.getTime(); };
+  const p2 = (n) => String(n).padStart(2, '0');
+  const hms = (t) => { const ms = toMs(t); if (!ms) return ''; const d = new Date(ms); return p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds()); };
+  const fmtTimeS = (t) => { const ms = toMs(t); if (!ms) return ''; const d = new Date(ms); return p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + hms(ms); };
+  const lateRef = () => { const v = $('#exStart') && $('#exStart').value; return v ? toMs(v) : 0; };
+  const lateGrace = () => Math.max(0, +(($('#exLate') || {}).value) || 0);
+  /** Số phút vào muộn (chỉ xét lần làm thứ 1; 0 = không muộn) */
+  const lateMin = (r) => { const ref = lateRef(), s0 = toMs(r['Bắt đầu']); if (!ref || !s0 || (+r['Lần'] || 1) > 1) return 0; const m = Math.floor((s0 - ref) / 60000); return m > lateGrace() ? m : 0; };
+  /** Nhật ký vi phạm của bài: [[loại, câu (0-based), thời điểm], …] */
+  const vlOf = (r) => { let d; try { d = JSON.parse(r['Chi tiết']); } catch (e) { return null; } if (d.vl) return d.vl; return Array.isArray(d.log) ? d.log.filter(e => e && e.v).map(e => [e.v, e.i == null ? null : e.i, e.t]) : null; };
+  /** Ghi chú ghi rõ: vào muộn, hết giờ kiểu nào, tự nộp vì sao, vi phạm gì – lúc nào – ở câu nào */
+  function explainNote(r) {
+    const st = (curExam && curExam.settings) || {}, w = QuizCore.window(st), end = toMs(r['Nộp bài']), out = [];
+    const lm = lateMin(r);
+    if (lm) out.push('VÀO MUỘN ' + lm + ' phút: bắt đầu làm lúc ' + hms(r['Bắt đầu']) + ', giờ thi ' + hms(lateRef()) + (lateGrace() ? ' (cho phép muộn ' + lateGrace() + ' phút)' : ''));
+    String(r['Ghi chú'] || '').split('; ').filter(Boolean).forEach(x => {
+      if (x === 'Hết giờ làm bài') { const lim = limOf(r); out.push('Hết giờ làm bài: máy tự nộp lúc ' + hms(end) + (w.end && Math.abs(end - w.end) < 180000 ? ' (đến giờ kết thúc bài ' + hms(w.end) + ')' : lim ? ' (bài cho làm ' + fmtDur(lim).trim() + ')' : '')); }
+      else if (x === 'Hết giờ' || x === 'Hết giờ câu cuối') out.push('Hết giờ của câu cuối (mỗi câu có đồng hồ riêng): máy tự nộp lúc ' + hms(end));
+      else if (/^Tự nộp do vi phạm/.test(x)) out.push('BỊ TỰ NỘP vì vi phạm đủ ' + x.replace(/\D+/g, '') + ' lần, lúc ' + hms(end));
+      else if (/^Vi phạm \d+ lần$/.test(x)) { /* ghi chi tiết bên dưới */ }
+      else out.push(x);
+    });
+    const v = +r['Vi phạm'] || 0;
+    if (v) { const vl = vlOf(r); out.push('VI PHẠM ' + v + ' lần' + (vl && vl.length ? ': ' + vl.map(e => e[0] + ' lúc ' + hms(e[2]) + (e[1] != null && e[1] !== '' ? ' (câu ' + (+e[1] + 1) + ')' : '')).join('; ') : '')); }
+    return out.join('; ');
+  }
+  /** Điền sẵn giờ thi khi mở kết quả một đề: giờ mở đề, nếu không có thì giờ em vào sớm nhất */
+  function initLateRef(res) {
+    const el = $('#exStart'); if (!el || el.dataset.exam === cur) return;
+    el.dataset.exam = cur;
+    const st = (curExam && curExam.settings) || {}, w = QuizCore.window(st);
+    let t = w.from || 0, src = 'giờ mở đề';
+    if (!t) { const ss = res.filter(r => (+r['Lần'] || 1) === 1).map(r => toMs(r['Bắt đầu'])).filter(Boolean); if (ss.length) { t = Math.min.apply(null, ss); src = 'em vào sớm nhất'; } }
+    if (t) { const d = new Date(t); el.value = d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + 'T' + p2(d.getHours()) + ':' + p2(d.getMinutes()); } else el.value = '';
+    if ($('#exStartSrc')) $('#exStartSrc').textContent = t ? '(tự lấy theo ' + src + ' — sửa nếu cần)' : '(chưa có giờ thi — nhập để xét vào muộn)';
+  }
+  ['exStart', 'exLate'].forEach(id => { if ($('#' + id)) $('#' + id).onchange = () => { if ($('#exStartSrc') && id === 'exStart') $('#exStartSrc').textContent = '(giáo viên nhập)'; if (curData) renderResults(); }; });
   function renderResults() {
     const res = (curData.results || []).slice().sort((a, b) => sortVN(a, b) || (+a['Nộp bài'] || 0) - (+b['Nộp bài'] || 0));
+    initLateRef(res);
     const pol = expPol(), agg = aggregate(res, pol), aggEx = aggregate(res);
     const exSt = (curExam && curExam.settings) || {};
     if ($('#exPolicy')) $('#exPolicy').options[0].textContent = 'Theo cài đặt đề (' + POLICY_TXT[exSt.scorePolicy || 'max'] + ')';
@@ -604,13 +643,13 @@
     const skCols = ['L', 'R', 'W', 'S'].filter(k => res.some(r => { const x = skOf(r); return x && x.s && x.s[k]; }));
     const hasToeic = res.some(r => { const x = skOf(r); return x && x.t && x.t.LR != null; });
     const skCell = (r) => { const x = skOf(r) || {}; return skCols.map(k => { const o = x.s && x.s[k]; return '<td class="num">' + (o ? (o.pending ? '<span class="pill warn" title="Chưa chấm ' + o.pending + ' câu">' + o.score + '*</span>' : o.score) : '—') + '</td>'; }).join('') + (hasToeic ? '<td class="num">' + (x.t && x.t.LR != null ? x.t.LR : '—') + '</td>' : ''); };
-    $('#resTbl').innerHTML = '<tr><th class="num">STT</th><th>Họ và tên</th><th>Lớp</th><th>MSSV</th><th class="num">Điểm</th>' + (multi ? '<th class="num">Lần</th>' : '') + skCols.map(k => '<th class="num">' + SKN[k] + '</th>').join('') + (hasToeic ? '<th class="num" title="Quy đổi TOEIC tham khảo (Nghe + Đọc)">TOEIC</th>' : '') + '<th class="num">Đúng</th>' + (hasEssay ? '<th>Tự luận / Nói</th>' : '') + '<th>Thời gian làm</th><th class="num">Vi phạm</th><th>Nộp lúc</th><th>Ghi chú</th><th></th></tr>' +
+    $('#resTbl').innerHTML = '<tr><th class="num">STT</th><th>Họ và tên</th><th>Lớp</th><th>MSSV</th><th class="num">Điểm</th>' + (multi ? '<th class="num">Lần</th>' : '') + skCols.map(k => '<th class="num">' + SKN[k] + '</th>').join('') + (hasToeic ? '<th class="num" title="Quy đổi TOEIC tham khảo (Nghe + Đọc)">TOEIC</th>' : '') + '<th class="num">Đúng</th>' + (hasEssay ? '<th>Tự luận / Nói</th>' : '') + '<th>Thời gian làm</th><th class="num">Vi phạm</th><th>Bắt đầu</th><th>Kết thúc (nộp)</th><th>Ghi chú</th><th></th></tr>' +
       (res.length ? res.map((r, i) => '<tr' + (multi && !chosenIds.has(r['Mã lượt']) ? ' class="muted"' : '') + '><td class="num">' + (i + 1) + '</td><td' + dupCls(r) + '><b>' + esc(r['Họ và tên']) + '</b></td><td>' + esc(r['Lớp']) + '</td><td>' + esc(r['MSSV']) + '</td>' +
         '<td class="num"><b>' + esc(r['Điểm']) + '</b>' + (r['Nộp sớm'] && r['Nộp sớm'] !== 'Giữ điểm' ? ' <span class="hint" title="Điểm bài làm trước khi xử lý nộp sớm">(bài làm ' + vnNum(origScore(r)) + ')</span>' : '') + (multi && chosenIds.has(r['Mã lượt']) ? ' <span class="pill ok" title="Điểm được ghi nhận">' + (pol === 'avg' ? 'TB ' + vnNum(agg.find(a => a.row === r).score) : '✓') + '</span>' : '') + '</td>' + (multi ? '<td class="num">' + esc(r['Lần'] || '') + '</td>' : '') + skCell(r) + '<td class="num">' + esc(r['Số câu đúng']) + '/' + esc(r['Số câu TN']) + '</td>' +
         (hasEssay ? '<td>' + (r['Tự luận'] ? '<span class="pill ' + (/Chưa/.test(r['Tự luận']) ? 'warn' : 'ok') + '">' + esc(r['Tự luận']) + '</span>' : '') + '</td>' : '') +
-        '<td>' + fmtDur(r['Thời gian làm (giây)']) + '</td><td class="num">' + (+r['Vi phạm'] ? '<span class="pill bad">' + r['Vi phạm'] + '</span>' : '0') + '</td><td>' + fmtTime(r['Nộp bài']) + '</td><td>' + esc(r['Ghi chú']) + '</td>' +
+        '<td>' + fmtDur(r['Thời gian làm (giây)']) + '</td><td class="num">' + (+r['Vi phạm'] ? '<span class="pill bad">' + r['Vi phạm'] + '</span>' : '0') + '</td><td style="white-space:nowrap">' + hms(r['Bắt đầu']) + (lateMin(r) ? ' <span class="pill bad" title="Vào muộn so với giờ thi">muộn ' + lateMin(r) + 'p</span>' : '') + '</td><td style="white-space:nowrap">' + hms(r['Nộp bài']) + '</td><td style="min-width:220px">' + esc(explainNote(r)) + '</td>' +
         '<td class="row" style="flex-wrap:nowrap">' + fastCell(r) + reCell(r) + '<button class="btn sm" data-see="' + esc(r['Mã lượt']) + '">' + (r['Tự luận'] ? 'Chấm / xem' : 'Xem bài') + '</button><button class="btn sm danger" data-redo="' + esc(r['Mã lượt']) + '" title="Xóa hẳn bài này để học sinh làm lại từ đầu">Xóa bài</button></td></tr>').join('')
-        : '<tr><td colspan="12" class="muted">Chưa có bài nộp.</td></tr>');
+        : '<tr><td colspan="13" class="muted">Chưa có bài nộp.</td></tr>');
     $$('[data-see]').forEach(b => b.onclick = () => seeAttempt(b.dataset.see));
     $$('[data-fast]').forEach(b => b.onclick = () => askFast(res.filter(r => r['Mã lượt'] === b.dataset.fast)));
     if ($('#fastAll')) $('#fastAll').onclick = () => askFast(fastPend);
@@ -701,24 +740,29 @@
     const howTxt = (a) => a.count < 2 ? 'Làm 1 lần' : pol === 'avg' ? 'Trung bình ' + a.count + ' lần = (' + a.list.map(r => vn(+r['Điểm'] || 0)).join(' + ') + ') / ' + a.count + ' = ' + vn(a.avg) : pol === 'max' ? 'Lần cao nhất trong ' + a.count + ' lần (' + lanShort(a.row) + ')' : pol === 'last' ? 'Lần cuối trong ' + a.count + ' lần (' + lanShort(a.row) + ')' : 'Lần đầu trong ' + a.count + ' lần';
     // Ghi chú đầy đủ: cách tính điểm + ghi chú / vi phạm / làm thêm của từng lần
     const noteTxt = (a) => {
-      if (a.count < 2) { const r = a.list[0]; return [isExtra(r) ? 'Lần làm thêm' : '', r['Ghi chú'] || '', +r['Vi phạm'] ? 'Vi phạm ' + r['Vi phạm'] + ' lần' : ''].filter(Boolean).join('; '); }
-      const per = a.list.map(r => { const x = [r['Ghi chú'] || '', +r['Vi phạm'] ? 'vi phạm ' + r['Vi phạm'] + ' lần' : ''].filter(Boolean).join('; '); return lanTxt(r) + ': ' + vn(+r['Điểm'] || 0) + ' điểm' + (x ? ' — ' + x : ''); });
+      if (a.count < 2) { const r = a.list[0]; return [isExtra(r) ? 'Lần làm thêm' : '', explainNote(r)].filter(Boolean).join('; '); }
+      const per = a.list.map(r => { const x = explainNote(r); return lanTxt(r) + ' (' + hms(r['Bắt đầu']) + ' → ' + hms(r['Nộp bài']) + '): ' + vn(+r['Điểm'] || 0) + ' điểm' + (x ? ' — ' + x : ''); });
       return 'Điểm ghi nhận: ' + howTxt(a) + '. ' + per.join(' | ');
     };
-    const rows1 = [[H('STT'), H('Họ và tên'), H('Lớp'), H('MSSV'), H('Điểm'), H('Số câu đúng'), H('Số câu TN'), H('Điểm TL đạt'), H('Tự luận'), H('Thời gian làm'), H('Vi phạm'), H('Nộp bài'), H('Ghi chú'), H('Mã đề'), H('Số lần làm'), H('Điểm các lần'), H('Điểm TB các lần'), H('Điểm cao nhất'), H('Điểm lần cuối'), H('Cách tính điểm')]];
+    const rows1 = [[H('STT'), H('Họ và tên'), H('Lớp'), H('MSSV'), H('Điểm'), H('Số câu đúng'), H('Số câu TN'), H('Điểm TL đạt'), H('Tự luận'), H('Thời gian làm'), H('Vi phạm'), H('Bắt đầu làm'), H('Kết thúc (nộp bài)'), H('Vào muộn (phút)'), H('Ghi chú'), H('Mã đề'), H('Số lần làm'), H('Điểm các lần'), H('Điểm TB các lần'), H('Điểm cao nhất'), H('Điểm lần cuối'), H('Cách tính điểm')]];
     const skOfX = (r) => { try { return JSON.parse(r['Kỹ năng'] || 'null') || {}; } catch (e) { return {}; } };
     const xCols = ['L', 'R', 'W', 'S'].filter(k => res.some(r => { const x = skOfX(r); return x.s && x.s[k]; }));
     const xToeic = res.some(r => { const x = skOfX(r); return x.t && x.t.LR != null; });
     xCols.forEach(k => rows1[0].push(H(SKN[k] + ' (thang 10)')));
     if (xToeic) ['TOEIC Nghe', 'TOEIC Đọc', 'TOEIC Nghe+Đọc'].forEach(h => rows1[0].push(H(h)));
-    agg.forEach((a, i) => { const r = a.row, x = skOfX(r); rows1.push([STT(i), C(r['Họ và tên']), C(r['Lớp']), C(r['MSSV']), N1(a.score), N(r['Số câu đúng']), N(r['Số câu TN']), N1(r['Điểm TL đạt']), C(r['Tự luận']), C(fmtDur(r['Thời gian làm (giây)'])), N(r['Vi phạm']), C(fmtTime(r['Nộp bài'])), C(noteTxt(a)), C(r['Mã đề']), N(a.count), C(scoresTxt(a)), N1(a.avg), N1(a.max), N1(a.last), C(howTxt(a))].concat(xCols.map(k => N1(x.s && x.s[k] ? x.s[k].score : ''))).concat(xToeic ? [N(x.t ? x.t.L : ''), N(x.t ? x.t.R : ''), N(x.t ? x.t.LR : '')] : []).concat([KT(r)])); });
+    agg.forEach((a, i) => { const r = a.row, x = skOfX(r); rows1.push([STT(i), C(r['Họ và tên']), C(r['Lớp']), C(r['MSSV']), N1(a.score), N(r['Số câu đúng']), N(r['Số câu TN']), N1(r['Điểm TL đạt']), C(r['Tự luận']), C(fmtDur(r['Thời gian làm (giây)'])), N(r['Vi phạm']), C(fmtTimeS(r['Bắt đầu'])), C(fmtTimeS(r['Nộp bài'])), N(lateMin(a.list[0]) || ''), C(noteTxt(a)), C(r['Mã đề']), N(a.count), C(scoresTxt(a)), N1(a.avg), N1(a.max), N1(a.last), C(howTxt(a))].concat(xCols.map(k => N1(x.s && x.s[k] ? x.s[k].score : ''))).concat(xToeic ? [N(x.t ? x.t.L : ''), N(x.t ? x.t.R : ''), N(x.t ? x.t.LR : '')] : []).concat([KT(r)])); });
     rows1[0].push(H('Khóa tên'));
     const kc1 = QA.colName(rows1[0].length - 1), n1 = Math.max(2, rows1.length), last1 = QA.colName(rows1[0].length - 2);
-    const cf1 = [{ ref: 'A2:' + last1 + n1, dxf: 0, formula: 'AND($O2=1,COUNTIF($' + kc1 + '$2:$' + kc1 + '$' + n1 + ',$' + kc1 + '2)>1)' }, { ref: 'A2:' + last1 + n1, dxf: 1, formula: 'AND(ISNUMBER($O2),$O2>=2)' }];
-    const rowsAll = [[H('STT'), H('Họ và tên'), H('Lớp'), H('MSSV'), H('Lần'), H('Điểm'), H('Số câu đúng'), H('Số câu TN'), H('Thời gian làm'), H('Vi phạm'), H('Nộp bài'), H('Ghi chú'), H('Khóa tên')]];
-    res.slice().sort((a, b) => sortVN(a, b) || (+a['Nộp bài'] || 0) - (+b['Nộp bài'] || 0)).forEach((r, i) => rowsAll.push([STT(i), C(r['Họ và tên']), C(r['Lớp']), C(r['MSSV']), N(r['Lần'] || 1), N1(r['Điểm']), N(r['Số câu đúng']), N(r['Số câu TN']), C(fmtDur(r['Thời gian làm (giây)'])), N(r['Vi phạm']), C(fmtTime(r['Nộp bài'])), C([isExtra(r) ? 'Lần làm thêm' : '', r['Ghi chú'] || ''].filter(Boolean).join('; ')), KT(r)]));
+    const hc = (rows, h) => QA.colName(rows[0].findIndex(c => c.v === h));
+    const lan1 = hc(rows1, 'Số lần làm'), late1 = hc(rows1, 'Vào muộn (phút)'), vp1 = hc(rows1, 'Vi phạm');
+    const cf1 = [{ ref: 'A2:' + last1 + n1, dxf: 0, formula: 'AND($' + lan1 + '2=1,COUNTIF($' + kc1 + '$2:$' + kc1 + '$' + n1 + ',$' + kc1 + '2)>1)' }, { ref: 'A2:' + last1 + n1, dxf: 1, formula: 'AND(ISNUMBER($' + lan1 + '2),$' + lan1 + '2>=2)' },
+      { ref: late1 + '2:' + late1 + n1, dxf: 0, formula: 'AND(ISNUMBER(' + late1 + '2),' + late1 + '2>0)' }, { ref: vp1 + '2:' + vp1 + n1, dxf: 0, formula: 'AND(ISNUMBER(' + vp1 + '2),' + vp1 + '2>0)' }];
+    const rowsAll = [[H('STT'), H('Họ và tên'), H('Lớp'), H('MSSV'), H('Lần'), H('Điểm'), H('Số câu đúng'), H('Số câu TN'), H('Thời gian làm'), H('Vi phạm'), H('Bắt đầu làm'), H('Kết thúc (nộp bài)'), H('Vào muộn (phút)'), H('Ghi chú'), H('Khóa tên')]];
+    res.slice().sort((a, b) => sortVN(a, b) || (+a['Nộp bài'] || 0) - (+b['Nộp bài'] || 0)).forEach((r, i) => rowsAll.push([STT(i), C(r['Họ và tên']), C(r['Lớp']), C(r['MSSV']), N(r['Lần'] || 1), N1(r['Điểm']), N(r['Số câu đúng']), N(r['Số câu TN']), C(fmtDur(r['Thời gian làm (giây)'])), N(r['Vi phạm']), C(fmtTimeS(r['Bắt đầu'])), C(fmtTimeS(r['Nộp bài'])), N(lateMin(r) || ''), C([isExtra(r) ? 'Lần làm thêm' : '', explainNote(r)].filter(Boolean).join('; ')), KT(r)]));
     const nA = Math.max(2, rowsAll.length);
-    const cfA = [{ ref: 'A2:L' + nA, dxf: 0, formula: 'AND($E2=1,COUNTIFS($M$2:$M$' + nA + ',$M2,$E$2:$E$' + nA + ',1)>1)' }, { ref: 'A2:L' + nA, dxf: 1, formula: 'AND(ISNUMBER($E2),$E2>=2)' }];
+    const kA = hc(rowsAll, 'Khóa tên'), lastA = QA.colName(rowsAll[0].length - 2), lateA = hc(rowsAll, 'Vào muộn (phút)'), vpA = hc(rowsAll, 'Vi phạm');
+    const cfA = [{ ref: 'A2:' + lastA + nA, dxf: 0, formula: 'AND($E2=1,COUNTIFS($' + kA + '$2:$' + kA + '$' + nA + ',$' + kA + '2,$E$2:$E$' + nA + ',1)>1)' }, { ref: 'A2:' + lastA + nA, dxf: 1, formula: 'AND(ISNUMBER($E2),$E2>=2)' },
+      { ref: lateA + '2:' + lateA + nA, dxf: 0, formula: 'AND(ISNUMBER(' + lateA + '2),' + lateA + '2>0)' }, { ref: vpA + '2:' + vpA + nA, dxf: 0, formula: 'AND(ISNUMBER(' + vpA + '2),' + vpA + '2>0)' }];
     const rows2 = [[{ v: 'THÔNG TIN BÀI KIỂM TRA / BÀI THI', s: 5 }], [],
       ['Tiêu đề', ex.title || ''], ['Loại bài', info.loai || ''], [(info.hinhThuc || 'Môn học/Mô đun'), info.mon || ''], ['Nội dung', info.noiDung || ''],
       ['Lớp', info.lop || ''], ['Khóa', info.khoa || ''], ['Lần thi', info.lan || ''], ['Ngày', info.ngay || ''], ['Giáo viên', info.gv || ''], ['Mã đề', cur],
@@ -728,7 +772,12 @@
       ['Lần làm thêm', maxA > 0 ? 'Lần thứ ' + (maxA + 1) + ' trở đi (giáo viên bấm "Cho làm thêm"), được ghi "(làm thêm)".' : 'Đề không giới hạn số lần làm.'],
       ['Bắt đầu vào làm', st.openFromTs ? fmtTime(st.openFromTs) : ''], ['Hết giờ vào làm', st.openToTs ? fmtTime(st.openToTs) : ''], ['Kết thúc bài', st.endAtTs ? fmtTime(st.endAtTs) : ''], ['Xuất lúc', fmtTime(Date.now())],
       ['Tô đỏ', 'Tên trùng nhau mà số lần làm là 1 — có thể một người đã làm 2 lần (ghi khác lớp / MSSV). Xóa bớt hàng trùng thì hết đỏ.'],
-      ['Tô vàng', 'Số lần làm từ 2 trở lên.'], ['Cột STT', 'Tự đánh lại số thứ tự khi xóa bớt hàng.'], [],
+      ['Tô vàng', 'Số lần làm từ 2 trở lên.'],
+      ['Giờ thi (xét vào muộn)', lateRef() ? fmtTimeS(lateRef()) + (lateGrace() ? ' — cho phép muộn ' + lateGrace() + ' phút' : '') : 'Không xét (chưa nhập giờ thi)'],
+      ['Vào muộn (phút)', 'Số phút em bắt đầu làm (lần 1) sau giờ thi, quá mức cho phép; ô có số được tô đỏ.'],
+      ['"Hết giờ làm bài"', 'Hết tổng thời gian của bài hoặc đến giờ kết thúc bài: máy tự nộp (ghi kèm giờ tự nộp).'],
+      ['"Hết giờ của câu cuối"', 'Đề cài mỗi câu có đồng hồ riêng: câu cuối hết giờ nên máy tự nộp.'],
+      ['"VI PHẠM"', 'Ghi rõ từng lần: Rời cửa sổ / Chuyển ứng dụng – tab / Thoát toàn màn hình / Chụp màn hình / In trang, lúc mấy giờ, ở câu nào. Ô Vi phạm > 0 được tô đỏ.'], ['Cột STT', 'Tự đánh lại số thứ tự khi xóa bớt hàng.'], [],
       [{ v: 'Phần mềm được tạo bởi Lê Duy Nam — Giảng viên Trường Cao đẳng Dầu khí', s: 6 }]];
     const rows3 = [[H('Họ và tên'), H('Lớp'), H('Lần'), H('Câu'), H('Loại'), H('Nội dung câu hỏi'), H('HS chọn / trả lời'), H('Đáp án'), H('Kết quả')]];
     const strip = (h) => String(h || '').replace(/<img[^>]*>/g, '[CT]').replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
@@ -744,8 +793,8 @@
       });
     });
     const blob = buildXlsx([
-      { name: 'KetQua', rows: rows1, cols: [6, 28, 14, 14, 8, 11, 10, 10, 16, 16, 9, 17, 46, 10, 10, 30, 12, 12, 12, 40].concat(rows1[0].slice(20, -1).map(() => 12)).concat([{ w: 20, hidden: true }]), freeze: 1, cf: cf1 },
-      { name: 'TatCaLanLam', rows: rowsAll, cols: [6, 28, 14, 14, 6, 8, 11, 10, 16, 9, 17, 26, { w: 20, hidden: true }], freeze: 1, cf: cfA },
+      { name: 'KetQua', rows: rows1, cols: [6, 28, 14, 14, 8, 11, 10, 10, 16, 16, 9, 20, 20, 10, 60, 10, 10, 30, 12, 12, 12, 40].concat(rows1[0].slice(22, -1).map(() => 12)).concat([{ w: 20, hidden: true }]), freeze: 1, cf: cf1 },
+      { name: 'TatCaLanLam', rows: rowsAll, cols: [6, 28, 14, 14, 6, 8, 11, 10, 16, 9, 20, 20, 10, 60, { w: 20, hidden: true }], freeze: 1, cf: cfA },
       { name: 'ThongTin', rows: rows2, cols: [22, 70] },
       { name: 'ChiTiet', rows: rows3, cols: [26, 12, 6, 6, 6, 60, 20, 12, 9], freeze: 1 }
     ]);
