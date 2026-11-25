@@ -552,6 +552,22 @@
     }
     return { src: svgDataUri(svg), w: r.w, h: r.h, svg };
   }
+  /** Đoán loại ảnh theo vài byte đầu: emf | wmf | png | jpeg | gif | bmp | webp | tiff | null */
+  function sniffImg(u8) {
+    if (!u8 || u8.length < 12) return null;
+    const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const u32 = (o) => dv.getUint32(o, true), u16 = (o) => dv.getUint16(o, true);
+    if (u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4E && u8[3] === 0x47) return 'png';
+    if (u8[0] === 0xFF && u8[1] === 0xD8) return 'jpeg';
+    if (u8[0] === 0x47 && u8[1] === 0x49 && u8[2] === 0x46) return 'gif';
+    if (u8[0] === 0x42 && u8[1] === 0x4D && u32(2) <= u8.length + 16) return 'bmp';
+    if (u8[0] === 0x52 && u8[1] === 0x49 && u8[2] === 0x46 && u8[3] === 0x46 && u8[8] === 0x57 && u8[9] === 0x45) return 'webp';
+    if ((u8[0] === 0x49 && u8[1] === 0x49 && u8[2] === 0x2A) || (u8[0] === 0x4D && u8[1] === 0x4D && u8[3] === 0x2A)) return 'tiff';
+    if (u32(0) === 0x9AC6CDD7) return 'wmf';                                    // WMF có header placeable
+    if (u8.length >= 88 && u32(0) === 1 && u32(40) === 0x464D4520) return 'emf';
+    if ((u16(0) === 1 || u16(0) === 2) && u16(2) === 9 && (u16(4) === 0x0100 || u16(4) === 0x0300)) return 'wmf'; // WMF chuẩn
+    return null;
+  }
   async function gunzip(u8) {
     const ds = new DecompressionStream('gzip');
     return new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer());
@@ -670,12 +686,17 @@
         const ext = (path.split('.').pop() || '').toLowerCase();
         let src = null, w = 0, h = 0;
         let ext2 = ext, data2 = data;
-        if (ext === 'emz' || ext === 'wmz') { try { data2 = await gunzip(data); ext2 = ext === 'emz' ? 'emf' : 'wmf'; } catch (e) { ext2 = ext; } }
+        // v2.7: nhận dạng theo NỘI DUNG file (Word hay đặt sai đuôi: ảnh WMF/PNG mang đuôi .emf…)
+        if (data2.length > 2 && data2[0] === 0x1F && data2[1] === 0x8B) { try { data2 = await gunzip(data2); } catch (e) { /* để nguyên */ } }
+        const sn = sniffImg(data2);
+        if (sn) ext2 = sn;
+        else if (ext === 'emz' || ext === 'wmz') ext2 = ext === 'emz' ? 'emf' : 'wmf';
+        const kind = /^(png|jpeg|gif|bmp|webp|tiff)$/.test(ext2) ? ext2 : ext, raw = data2;
         if (ext2 === 'wmf') { try { const r = wmfToSvg(data2); src = svgDataUri(r.svg); w = r.w; h = r.h; } catch (e) { warnings.push('Không vẽ được công thức ' + path); } }
         else if (ext2 === 'emf') { try { const r = emfToDataUri(data2); src = r.src; w = r.w; h = r.h; } catch (e) { warnings.push('Ảnh .emf (' + path.split('/').pop() + ') không vẽ lại được (' + e.message + ') — nên chèn lại dạng PNG/JPG.'); } }
-        else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'gif' || ext === 'bmp' || ext === 'svg' || ext === 'webp') {
-          const mime = ext === 'jpg' ? 'image/jpeg' : ext === 'svg' ? 'image/svg+xml' : 'image/' + ext;
-          src = 'data:' + mime + ';base64,' + u8ToBase64(data);
+        else if (kind === 'png' || kind === 'jpg' || kind === 'jpeg' || kind === 'gif' || kind === 'bmp' || kind === 'svg' || kind === 'webp') {
+          const mime = kind === 'jpg' ? 'image/jpeg' : kind === 'svg' ? 'image/svg+xml' : 'image/' + kind;
+          src = 'data:' + mime + ';base64,' + u8ToBase64(raw);
         } else {
           warnings.push('Ảnh dạng .' + ext + ' (' + path.split('/').pop() + ') trình duyệt không hiển thị được — nên chèn lại dạng PNG/JPG.');
         }
@@ -1019,7 +1040,7 @@
     return { name: (fileName || 'De').replace(/\.docx$/i, ''), questions: result, groups: outGroups, warnings };
   }
 
-  const api = { readZip, parseDocx, wmfToSvg, emfToSvg, emfToDataUri, mapChar };
+  const api = { readZip, parseDocx, wmfToSvg, emfToSvg, emfToDataUri, sniffImg, mapChar };
   root.QuizDocx = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
