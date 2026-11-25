@@ -318,11 +318,25 @@
       out.push('<image x="' + fmt(X) + '" y="' + fmt(Y) + '" width="' + fmt(W) + '" height="' + fmt(H) + '" preserveAspectRatio="none" href="__BMP' + id + '__"' + tr + '/>');
       return true;
     };
-    let pos = 0, guard = 0, drew = 0, plusOnly = false;
+    let pos = 0, guard = 0, drew = 0, plusOnly = false, paintOps = 0, inPathRec = false, richComment = false;
+    // v2.8: bản ghi THỰC SỰ vẽ ra giấy (để nhận ra ảnh trống, vd công thức MathType rỗng)
+    const PAINT = new Set([41, 42, 43, 44, 45, 46, 47, 62, 63, 64, 71, 72, 73, 74, 76, 77, 78, 79, 80, 81, 83, 84, 108, 114, 116, 118]);
+    const PATHABLE = new Set([2, 3, 4, 5, 6, 7, 8, 53, 54, 56, 85, 86, 87, 88, 89, 90, 91, 92]);
     while (pos + 8 <= u8.length && guard++ < 200000) {
       const type = u32(pos), size = u32(pos + 4);
       if (size < 8 || pos + size > u8.length) break;
       const b = pos, rec = { pos, size };
+      if (type === 59) inPathRec = true; else if (type === 60) inPathRec = false;
+      if (PAINT.has(type) || (PATHABLE.has(type) && !inPathRec)) paintOps++;
+      if (type === 70 && size >= 20) {
+        const id = u32(b + 12);
+        if (id === 0x43494447 && u32(b + 16) === 0x40000004) { // GDIC MULTIFORMATS (vd PDF từ Mac): trống nếu luồng nội dung rất ngắn
+          const txt = String.fromCharCode.apply(null, u8.subarray(b, Math.min(b + size, b + 4096)));
+          const L = txt.match(/\/Length\s+(\d+)(?:\s+0\s+R)?/), Ln = txt.match(/endobj\s*\d+\s+0\s+obj\s*(\d+)\s*endobj/);
+          const len = L && !/0\s+R/.test(L[0]) ? +L[1] : Ln ? +Ln[1] : 9999;
+          if (len > 16) richComment = true;
+        }
+      }
       switch (type) {
         case 14: pos = u8.length; continue; // EOF
         case 9: st.we = [i32(b + 8), i32(b + 12)]; M = null; break;
@@ -444,7 +458,10 @@
       }
       pos += size;
     }
-    if (!drew) throw new Error(plusOnly ? 'EMF+ chỉ có bản ghi GDI+' : 'EMF không có nét vẽ nào đọc được');
+    if (!drew) {
+      if (!paintOps && !plusOnly && !richComment) { const e = new Error('EMF trống'); e.blank = true; throw e; }
+      throw new Error(plusOnly ? 'EMF+ chỉ có bản ghi GDI+' : 'EMF không có nét vẽ nào đọc được');
+    }
     // khung hình: Frame (0,01 mm) → tọa độ thiết bị; dự phòng Bounds
     let vx, vy, vw, vh;
     if (frame.r > frame.l && frame.b > frame.t) { vx = frame.l / 100 * pxPerMm.x; vy = frame.t / 100 * pxPerMm.y; vw = (frame.r - frame.l) / 100 * pxPerMm.x; vh = (frame.b - frame.t) / 100 * pxPerMm.y; }
@@ -693,7 +710,7 @@
         else if (ext === 'emz' || ext === 'wmz') ext2 = ext === 'emz' ? 'emf' : 'wmf';
         const kind = /^(png|jpeg|gif|bmp|webp|tiff)$/.test(ext2) ? ext2 : ext, raw = data2;
         if (ext2 === 'wmf') { try { const r = wmfToSvg(data2); src = svgDataUri(r.svg); w = r.w; h = r.h; } catch (e) { warnings.push('Không vẽ được công thức ' + path); } }
-        else if (ext2 === 'emf') { try { const r = emfToDataUri(data2); src = r.src; w = r.w; h = r.h; } catch (e) { warnings.push('Ảnh .emf (' + path.split('/').pop() + ') không vẽ lại được (' + e.message + ') — nên chèn lại dạng PNG/JPG.'); } }
+        else if (ext2 === 'emf') { try { const r = emfToDataUri(data2); src = r.src; w = r.w; h = r.h; } catch (e) { if (e.blank) { w = (wPt || 8) * 1.333; h = (hPt || 12) * 1.333; src = svgDataUri('<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(w) + '" height="' + Math.round(h) + '"/>'); } else warnings.push('Ảnh .emf (' + path.split('/').pop() + ') không vẽ lại được (' + e.message + ') — nên chèn lại dạng PNG/JPG.'); } }
         else if (kind === 'png' || kind === 'jpg' || kind === 'jpeg' || kind === 'gif' || kind === 'bmp' || kind === 'svg' || kind === 'webp') {
           const mime = kind === 'jpg' ? 'image/jpeg' : kind === 'svg' ? 'image/svg+xml' : 'image/' + kind;
           src = 'data:' + mime + ';base64,' + u8ToBase64(raw);
